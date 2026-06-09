@@ -4,9 +4,9 @@
   "version": "1.4.0",
   "identifier": "com.axeane.automation",
   "build": {
-    "beforeDevCommand": "npm --prefix ../frontend run build",
+    "beforeDevCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_frontend.ps1",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "npm --prefix ../frontend run build",
+    "beforeBuildCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_frontend.ps1",
     "frontendDist": "../frontend/out"
   },
   "app": {

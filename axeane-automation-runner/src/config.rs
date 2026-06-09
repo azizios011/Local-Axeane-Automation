@@ -51,7 +51,7 @@ impl AppConfig {
         Ok(Self {
             install_dir,
             backend_port: 8080,
-            health_timeout_secs: 60,
+            health_timeout_secs: 5,
             backend_pid_path,
             frontend_port: 3000,
         })
@@ -69,39 +69,65 @@ impl AppConfig {
         format!("{}/health", self.backend_url())
     }
 
-    /// Validate that the Tauri install layout is sane.
+    /// Locate the `binaries/` folder that contains the PyInstaller-built
+    /// `python-backend[-<triple>](.exe)` sidecar.
     ///
-    /// In the Tauri 2 layout:
-    ///   * The Python sidecar must live at `<install>/binaries/python-backend[-<triple>].exe`
-    ///   * The static frontend is bundled into the Tauri app and does
-    ///     not need to exist on disk next to the host binary at
-    ///     runtime (Tauri reads it from `frontendDist`).
+    /// Looks in two places, in order:
+    ///   1. `<install_dir>/binaries/` — Tauri places `externalBin` files
+    ///      here when the host is launched from `target\release\`.
+    ///   2. `<install_dir>/../binaries/` — the source-tree location, used
+    ///      when the host is launched from `cargo tauri dev` (where
+    ///      `install_dir` is `target\debug\` and the real folder is one
+    ///      level up, next to `Cargo.toml`).
+    ///
+    /// Returns the first directory that contains a `python-backend*`
+    /// file. Returns `None` if no candidate folder has the sidecar.
+    pub fn find_binaries_dir(&self) -> Option<PathBuf> {
+        // (1) Bundled layout: target/release/binaries/
+        let bundled = self.install_dir.join("binaries");
+        if has_sidecar(&bundled) {
+            return Some(bundled);
+        }
+
+        // (2) Dev layout: <source>/binaries/  (one level up from
+        //     target/debug/)
+        let dev = self.install_dir.parent()?.join("binaries");
+        if has_sidecar(&dev) {
+            return Some(dev);
+        }
+
+        None
+    }
+
+    /// Validate the install layout. Emits a **warning** (not an error)
+    /// if the sidecar is missing — the Tauri window should still open
+    /// so the user can see a useful error toast.
     pub fn validate(&self) -> crate::error::Result<()> {
-        // Look for the sidecar binary (any triple) so we can give a
-        // helpful error if it has not been built.
-        let binaries_dir = self.install_dir.join("binaries");
-        if !binaries_dir.exists() {
-            return Err(crate::error::AppError::ConfigError(format!(
-                "Sidecar folder not found: {} - build it with tools/build_python_sidecar.ps1",
-                binaries_dir.display()
-            )));
+        if self.find_binaries_dir().is_none() {
+            tracing::warn!(
+                "No 'python-backend' sidecar found. Looked in: {}/binaries/ and \
+                 {}/../binaries/. Run tools/build_python_sidecar.ps1 to build it.",
+                self.install_dir.display(),
+                self.install_dir.display()
+            );
         }
-
-        let has_sidecar = std::fs::read_dir(&binaries_dir)
-            .map_err(|e| crate::error::AppError::ConfigError(e.to_string()))?
-            .filter_map(Result::ok)
-            .any(|entry| {
-                let name = entry.file_name().to_string_lossy().into_owned();
-                name.starts_with("python-backend")
-            });
-
-        if !has_sidecar {
-            return Err(crate::error::AppError::ConfigError(format!(
-                "No 'python-backend' sidecar found in {}. Run tools/build_python_sidecar.ps1",
-                binaries_dir.display()
-            )));
-        }
-
         Ok(())
     }
+}
+
+fn has_sidecar(dir: &std::path::Path) -> bool {
+    if !dir.exists() {
+        return false;
+    }
+    std::fs::read_dir(dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .any(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("python-backend")
+        })
 }

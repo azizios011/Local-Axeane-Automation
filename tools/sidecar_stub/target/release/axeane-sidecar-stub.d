@@ -1,0 +1,1 @@
+C:\Users\azizh\OneDrive\Desktop\Local-Axeane-Automation\tools\sidecar_stub\target\release\axeane-sidecar-stub.exe: C:\Users\azizh\OneDrive\Desktop\Local-Axeane-Automation\tools\sidecar_stub\src\main.rs

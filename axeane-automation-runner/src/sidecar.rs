@@ -1,9 +1,17 @@
 //! Python backend sidecar lifecycle.
 //!
 //! The PyInstaller-bundled `python-backend(.exe)` is launched as a child
-//! process of the Tauri host via the official `tauri-plugin-shell`
-//! `Command::sidecar()` API. We then:
+//! process of the Tauri host. We support two spawn paths:
 //!
+//!   1. **Tauri's resource path** (`app.shell().sidecar(...)`) — used in
+//!      production MSI/NSIS bundles where Tauri has staged the sidecar
+//!      into the installer payload.
+//!   2. **Direct `std::process::Command`** with the absolute path —
+//!      used in dev / `cargo tauri build --no-bundle` mode where the
+//!      sidecar sits next to the host executable but Tauri's resource
+//!      resolver has not been populated.
+//!
+//! We then:
 //!   * Stream `stdout` lines through `tracing::info!`.
 //!   * Stream `stderr` lines through `tracing::warn!`.
 //!   * Persist the child PID to `backend_pid_path` so a stale instance
@@ -11,14 +19,16 @@
 //!   * Kill the child on `WindowEvent::CloseRequested` to guarantee
 //!     no orphan service is left running.
 
-use std::path::Path;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::OnceLock;
 
+use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::async_runtime::{self, JoinHandle};
 use tauri::{AppHandle, Emitter};
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tracing::{error, info, warn};
 
@@ -30,32 +40,39 @@ pub const SIDECAR_NAME: &str = "binaries/python-backend";
 
 /// Globally-registered handle to the running sidecar so we can kill it
 /// from event hooks (e.g. `WindowEvent::CloseRequested`).
-///
-/// We hold the `Option<SidecarHandle>` behind a `parking_lot::Mutex` so
-/// the inner fields can be mutated through `DerefMut`. Be careful: the
-/// lock guard is `MutexGuard<Option<SidecarHandle>>` — to reach the
-/// inner struct you must deref once: `(*guard).child`.
-static SIDECAR: OnceLock<parking_lot::Mutex<Option<SidecarHandle>>> = OnceLock::new();
+static SIDECAR: OnceLock<Mutex<Option<SidecarHandle>>> = OnceLock::new();
 
-/// Light wrapper around the `CommandChild` so we keep both the child and
-/// the abort-handle of the stdout/stderr reader task in one place.
-#[derive(Default)]
+/// A running sidecar process. We abstract over the two spawn paths
+/// (Tauri-managed vs direct Command) so the rest of the code can be
+/// agnostic to how the child was launched.
 pub struct SidecarHandle {
-    pub child: Option<CommandChild>,
+    /// Handle to a Tauri-managed child (path #1).
+    tauri_child: Option<tauri_plugin_shell::process::CommandChild>,
+    /// Direct child (path #2).
+    direct_child: Option<std::process::Child>,
     pub reader: Option<JoinHandle<()>>,
 }
 
-impl SidecarHandle {
-    pub fn global() -> &'static parking_lot::Mutex<Option<SidecarHandle>> {
-        SIDECAR.get_or_init(|| parking_lot::Mutex::new(None))
+impl Default for SidecarHandle {
+    fn default() -> Self {
+        Self {
+            tauri_child: None,
+            direct_child: None,
+            reader: None,
+        }
     }
 }
 
-/// Payload emitted on the `sidecar://log` event for the front-end (a
-/// future Tauri feature — kept here for completeness).
+impl SidecarHandle {
+    pub fn global() -> &'static Mutex<Option<SidecarHandle>> {
+        SIDECAR.get_or_init(|| Mutex::new(None))
+    }
+}
+
+/// Payload emitted on the `sidecar://log` event for the front-end.
 #[derive(Debug, Clone, Serialize)]
 pub struct LogLine {
-    pub stream: &'static str, // "stdout" | "stderr"
+    pub stream: &'static str,
     pub line: String,
 }
 
@@ -70,41 +87,35 @@ pub fn spawn_and_wait(app: &AppHandle, config: &AppConfig) -> Result<()> {
         SIDECAR_NAME, config.backend_port
     );
 
-    let shell = app.shell();
-    let sidecar_command = shell
-        .sidecar(SIDECAR_NAME)
-        .map_err(|e| AppError::Sidecar(format!("sidecar command not found: {e}")))?
-        .args([
-            "--host",
-            "127.0.0.1",
-            "--port",
-            &config.backend_port.to_string(),
-        ]);
+    // -------- Path 1: try Tauri's resource resolver first --------
+    let tauri_attempt = spawn_via_tauri(app, config);
 
-    // `rx` does not need to be `mut` because the consumer takes
-    // ownership via the spawned task. `child` is the only thing we
-    // need to keep around for the lifetime of the sidecar.
-    let (rx, child) = sidecar_command
-        .spawn()
-        .map_err(|e| AppError::Sidecar(format!("failed to spawn sidecar: {e}")))?;
+    // -------- Path 2: if that fails, fall back to direct Command --------
+    let (rx, child_pid, tauri_child, direct_child) = match tauri_attempt {
+        Ok(ok) => ok,
+        Err(e) => {
+            warn!(
+                "Tauri shell.sidecar() failed ({}), falling back to direct Command",
+                e
+            );
+            spawn_via_command(config)?
+        }
+    };
 
-    let pid = child.pid();
-    info!("Python sidecar started (pid: {})", pid);
+    info!("Python sidecar started (pid: {})", child_pid);
 
     // Persist PID for orphan cleanup on next launch.
     if let Some(parent) = config.backend_pid_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(&config.backend_pid_path, pid.to_string());
+    let _ = std::fs::write(&config.backend_pid_path, child_pid.to_string());
 
-    // Fan out the stdout/stderr event stream into the tracing pipeline
-    // and into Tauri's event system so the front-end can optionally
-    // listen via `tauri::listen("sidecar://log", ...)`.
+    // Fan out the stdout/stderr event stream into the tracing pipeline.
     let reader = async_runtime::spawn(stream_logs(app.clone(), rx));
 
-    // Register the handle so the window-close hook can kill it.
     *SidecarHandle::global().lock() = Some(SidecarHandle {
-        child: Some(child),
+        tauri_child,
+        direct_child,
         reader: Some(reader),
     });
 
@@ -116,31 +127,180 @@ pub fn spawn_and_wait(app: &AppHandle, config: &AppConfig) -> Result<()> {
     Ok(())
 }
 
+/// Spawn via `tauri-plugin-shell` and obtain an event receiver.
+fn spawn_via_tauri(
+    app: &AppHandle,
+    config: &AppConfig,
+) -> Result<(
+    tauri::async_runtime::Receiver<CommandEvent>,
+    u32,
+    Option<tauri_plugin_shell::process::CommandChild>,
+    Option<std::process::Child>,
+)> {
+    let shell = app.shell();
+    let cmd = shell
+        .sidecar(SIDECAR_NAME)
+        .map_err(|e| AppError::Sidecar(format!("sidecar command not found: {e}")))?
+        .args([
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &config.backend_port.to_string(),
+        ]);
+    let (rx, child) = cmd
+        .spawn()
+        .map_err(|e| AppError::Sidecar(format!("failed to spawn sidecar: {e}")))?;
+    let pid = child.pid();
+    Ok((rx, pid, Some(child), None))
+}
+
+/// Spawn via a plain `std::process::Command` against the absolute
+/// path of the sidecar. Stdout/stderr are read on dedicated OS
+/// threads and bridged into the async `CommandEvent` stream.
+fn spawn_via_command(
+    config: &AppConfig,
+) -> Result<(
+    tauri::async_runtime::Receiver<CommandEvent>,
+    u32,
+    Option<tauri_plugin_shell::process::CommandChild>,
+    Option<std::process::Child>,
+)> {
+    let path = resolve_sidecar_path(config).ok_or_else(|| {
+        AppError::Sidecar("No sidecar binary found. Run tools/build_python_sidecar.ps1".into())
+    })?;
+
+    info!("Launching sidecar directly: {}", path.display());
+
+    let mut child = std::process::Command::new(&path)
+        .args([
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &config.backend_port.to_string(),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null())
+        .spawn()
+        .map_err(|e| AppError::Sidecar(format!("Command::new failed: {e}")))?;
+
+    let pid = child.id();
+
+    // Bridge: read stdout/stderr synchronously on dedicated threads
+    // and forward each line as a `CommandEvent` into the async channel.
+    let (tx, rx) = tauri::async_runtime::channel::<CommandEvent>(64);
+
+    if let Some(stdout) = child.stdout.take() {
+        let tx = tx.clone();
+        std::thread::Builder::new()
+            .name("axeane-sidecar-stdout".into())
+            .spawn(move || {
+                let reader = BufReader::new(stdout);
+                for line in reader.lines().filter_map(|l| l.ok()) {
+                    // Best-effort: if the channel is closed, the
+                    // receiver has been dropped, so we exit.
+                    if tx
+                        .blocking_send(CommandEvent::Stdout(line.into_bytes()))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            })
+            .map_err(|e| AppError::Sidecar(format!("thread spawn failed: {e}")))?;
+    }
+
+    if let Some(stderr) = child.stderr.take() {
+        let tx = tx.clone();
+        std::thread::Builder::new()
+            .name("axeane-sidecar-stderr".into())
+            .spawn(move || {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().filter_map(|l| l.ok()) {
+                    if tx
+                        .blocking_send(CommandEvent::Stderr(line.into_bytes()))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            })
+            .map_err(|e| AppError::Sidecar(format!("thread spawn failed: {e}")))?;
+    }
+
+    Ok((rx, pid, None, Some(child)))
+}
+
+/// Locate the sidecar binary on disk. We look in every plausible
+/// location and return the first one that exists.
+fn resolve_sidecar_path(config: &AppConfig) -> Option<PathBuf> {
+    let install = &config.install_dir;
+    let install_parent = install.parent();
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // 1) install_dir/binaries/python-backend.exe (bundled, no triple)
+    candidates.push(install.join("binaries").join("python-backend.exe"));
+    candidates.push(install.join("binaries").join("python-backend"));
+
+    // 2) install_dir/binaries/python-backend-<triple>.exe (bundled with triple)
+    if let Some(dir) = config.find_binaries_dir() {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if name.starts_with("python-backend") {
+                    candidates.push(e.path());
+                }
+            }
+        }
+    }
+
+    // 3) install_dir/python-backend.exe (next to the .exe)
+    candidates.push(install.join("python-backend.exe"));
+    candidates.push(install.join("python-backend"));
+
+    // 4) parent/binaries/ (dev mode)
+    if let Some(p) = install_parent {
+        candidates.push(p.join("binaries").join("python-backend.exe"));
+        candidates.push(p.join("binaries").join("python-backend"));
+    }
+
+    for c in candidates {
+        if c.exists() {
+            return Some(c);
+        }
+    }
+    None
+}
+
 /// Drain the sidecar's event stream into the tracing pipeline.
-async fn stream_logs(
-    app: AppHandle,
-    mut rx: tauri::async_runtime::Receiver<CommandEvent>,
-) {
+async fn stream_logs(app: AppHandle, mut rx: tauri::async_runtime::Receiver<CommandEvent>) {
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(line_bytes) => {
                 let line = String::from_utf8_lossy(&line_bytes).trim_end().to_string();
                 if !line.is_empty() {
                     info!(target: "sidecar.stdout", "{}", line);
-                    let _ = app.emit("sidecar://log", LogLine {
-                        stream: "stdout",
-                        line: line.clone(),
-                    });
+                    let _ = app.emit(
+                        "sidecar://log",
+                        LogLine {
+                            stream: "stdout",
+                            line: line.clone(),
+                        },
+                    );
                 }
             }
             CommandEvent::Stderr(line_bytes) => {
                 let line = String::from_utf8_lossy(&line_bytes).trim_end().to_string();
                 if !line.is_empty() {
                     warn!(target: "sidecar.stderr", "{}", line);
-                    let _ = app.emit("sidecar://log", LogLine {
-                        stream: "stderr",
-                        line,
-                    });
+                    let _ = app.emit(
+                        "sidecar://log",
+                        LogLine {
+                            stream: "stderr",
+                            line,
+                        },
+                    );
                 }
             }
             CommandEvent::Error(err) => {
@@ -152,11 +312,10 @@ async fn stream_logs(
                     "process terminated (code={:?}, signal={:?})",
                     payload.code, payload.signal
                 );
-                // The sidecar exited on its own — clear the global
-                // handle so we don't try to kill a dead process.
                 if let Some(slot) = SIDECAR.get() {
                     if let Some(handle) = slot.lock().as_mut() {
-                        handle.child = None;
+                        handle.tauri_child = None;
+                        handle.direct_child = None;
                     }
                 }
                 break;
@@ -195,32 +354,26 @@ fn wait_for_health(health_url: &str, timeout_secs: u64) -> Result<()> {
 }
 
 /// Terminate the Python sidecar (best-effort, idempotent).
-///
-/// Called from:
-///   * `WindowEvent::CloseRequested` (user closed the main window)
-///   * `RunEvent::ExitRequested` (Tauri runtime shutting down)
-///   * Process termination (e.g. `Drop` of the global handle)
 pub fn terminate(config: &AppConfig) {
     let Some(slot) = SIDECAR.get() else { return };
     let mut guard = slot.lock();
 
-    // `guard` is `MutexGuard<Option<SidecarHandle>>`. Deref once to get
-    // `&mut Option<SidecarHandle>`, then `as_mut()` to reach the inner
-    // struct.
     let Some(handle) = guard.as_mut() else {
         info!("terminate() called but sidecar is already gone");
         return;
     };
 
-    if let Some(child) = handle.child.take() {
-        // CommandChild in tauri-plugin-shell 2 has only `kill()` — no
-        // `wait()`. The OS reaps the process; the reader task gets
-        // the Terminated event when it happens.
-        info!("Terminating Python sidecar (pid: {})", child.pid());
-        if let Err(e) = child.kill() {
-            error!("Failed to kill sidecar: {}", e);
-        }
-    } else {
+    if let Some(child) = handle.tauri_child.take() {
+        info!("Terminating Tauri-managed sidecar (pid: {})", child.pid());
+        let _ = child.kill();
+    }
+    if let Some(mut child) = handle.direct_child.take() {
+        let pid = child.id();
+        info!("Terminating direct-Command sidecar (pid: {})", pid);
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    if handle.tauri_child.is_none() && handle.direct_child.is_none() {
         info!("terminate() called but sidecar is already gone");
     }
 
@@ -230,7 +383,6 @@ pub fn terminate(config: &AppConfig) {
 
     drop(guard);
 
-    // Remove the PID file so the next launch does not see a stale entry.
     let _ = std::fs::remove_file(&config.backend_pid_path);
 }
 
@@ -251,7 +403,6 @@ fn cleanup_stale_pid(path: &Path) {
 
 #[cfg(windows)]
 fn kill_pid(pid: u32) {
-    // taskkill /F /T  →  force-kill process tree
     let _ = std::process::Command::new("taskkill")
         .args(["/F", "/T", "/PID", &pid.to_string()])
         .stdout(Stdio::null())
