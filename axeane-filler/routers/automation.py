@@ -6,6 +6,7 @@ from models.invoice import ExtractedDocument, FillingResult
 from services.formula_engine import build_fill_data
 from services.pwa_filler import PWAFiller
 from storage import formulas_store
+from config import settings
 
 router = APIRouter(prefix="/automation", tags=["automation"])
 
@@ -77,3 +78,27 @@ def _resolve_formula(formula_id: Optional[str], libelle: str):
                    f"Please create one or pass formula_id explicitly."
         )
     return formula
+
+
+@router.get("/discover")
+async def discover_ng_models(cdp_port: int = None):
+    """
+    Debug endpoint: connects to the running Edge PWA via CDP and returns
+    all ng-model attribute names found on the current page.
+
+    Use this while the Saisie des écritures form is open in the PWA to
+    discover the real ng-model names, then update pwa_filler.py field_map
+    and nya_map with the correct values.
+
+    Usage: GET /automation/discover?cdp_port=9222
+    """
+    filler = PWAFiller(cdp_port=cdp_port)
+    try:
+        models = await filler.discover_ng_models()
+        return {
+            "count": len(models),
+            "ng_models": models
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"CDP connection failed: {str(e)}. "
+                            f"Make sure Edge PWA is running with --remote-debugging-port={cdp_port or settings.cdp_port}")
