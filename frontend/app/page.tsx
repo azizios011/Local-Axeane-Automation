@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { 
   Activity, 
   CheckCircle2, 
@@ -9,10 +10,29 @@ import {
   FileText,
   AlertTriangle,
   RefreshCcw,
-  Clock
+  Clock,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
+import { apiClient } from '@/lib/api';
 
 export default function DashboardPage() {
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const res = await apiClient.getHealth();
+        setIsOnline(res.status === 'ok' || res.status === 'healthy' || res.status === 'online');
+      } catch (err) {
+        setIsOnline(false);
+      }
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <main className="ml-sidebar-width pt-[88px] px-lg pb-xl min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-xl gap-md">
@@ -23,9 +43,11 @@ export default function DashboardPage() {
         <div className="bg-surface-container border border-outline-variant rounded p-3 flex items-center gap-3">
           <div className="flex flex-col">
             <span className="text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Backend Status</span>
-            <span className="text-data-mono font-data-mono text-on-surface">Connected</span>
+            <span className={`text-data-mono font-data-mono ${isOnline ? 'text-primary' : 'text-error'}`}>
+              {isOnline === null ? 'Checking...' : isOnline ? 'Connected' : 'Disconnected'}
+            </span>
           </div>
-          <div className="w-2.5 h-2.5 rounded-full bg-primary pulse ml-sm"></div>
+          <div className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-primary pulse' : isOnline === false ? 'bg-error' : 'bg-outline'} ml-sm`}></div>
         </div>
       </div>
 

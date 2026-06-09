@@ -121,10 +121,26 @@ export class ApiError extends Error {
 // ============================================================================
 
 export class ApiClient {
-  private baseUrl: string;
+  private _baseUrl: string | null = null;
 
   constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    if (baseUrl) this._baseUrl = baseUrl;
+  }
+
+  private get baseUrl(): string {
+    if (this._baseUrl) return this._baseUrl;
+    
+    // Check localStorage first (client-side)
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('NEXT_PUBLIC_API_URL');
+      if (saved) return saved;
+    }
+    
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  }
+
+  setBaseUrl(url: string) {
+    this._baseUrl = url;
   }
 
   private async request<T>(

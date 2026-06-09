@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { FileUp, FileText, Braces, Eye, Send, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { FileUp, FileText, Braces, Eye, Send, ChevronLeft, ChevronRight, Loader2, Zap } from 'lucide-react';
 import { apiClient, ExtractedDocument, InvoiceRow } from '@/lib/api';
 import { useToast } from '@/lib/toast';
+import { useAppContext } from '@/lib/context';
+import { useRouter } from 'next/navigation';
 
 export default function ExtractionPage() {
-  const [extractedDoc, setExtractedDoc] = useState<ExtractedDocument | null>(null);
+  const { extractedDoc, setExtractedDoc } = useAppContext();
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -200,7 +203,13 @@ export default function ExtractionPage() {
                 </span>
               </h2>
             </div>
-            <div className="flex gap-sm">
+              <button
+                onClick={() => router.push('/automation')}
+                className="border border-primary/50 text-primary hover:bg-primary/10 rounded-lg px-4 py-2 text-label-caps font-label-caps transition-colors flex items-center gap-2 focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:ring-offset-surface shadow-[0_0_10px_rgba(78,222,163,0.1)]"
+              >
+                <Zap className="w-[18px] h-[18px]" />
+                Go to Automation
+              </button>
               <button
                 onClick={downloadJSON}
                 className="border border-outline-variant text-on-surface hover:text-primary hover:border-primary/50 hover:bg-surface-container-highest rounded-lg px-4 py-2 text-label-caps font-label-caps transition-colors flex items-center gap-2 focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:ring-offset-surface"

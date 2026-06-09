@@ -4,6 +4,7 @@ import './globals.css';
 import { Sidebar } from '@/components/Sidebar';
 import { TopNav } from '@/components/TopNav';
 import ToastProvider from '@/components/ToastProvider';
+import { AppProvider } from '@/lib/context';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -24,11 +25,13 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="bg-background text-on-background min-h-screen text-body-md overflow-x-hidden antialiased" suppressHydrationWarning>
-        <ToastProvider>
-          <Sidebar />
-          <TopNav />
-          {children}
-        </ToastProvider>
+        <AppProvider>
+          <ToastProvider>
+            <Sidebar />
+            <TopNav />
+            {children}
+          </ToastProvider>
+        </AppProvider>
       </body>
     </html>
   );
