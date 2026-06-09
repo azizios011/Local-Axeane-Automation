@@ -40,6 +40,15 @@ dirs = "5"
 wry = "0.55"
 tao = { version = "0.35", features = ["rwh_06"] }
 
+[dev-dependencies]
+# Static file MIME detection — used by the `webview_frontend` example to
+# serve the Next.js static export with the correct Content-Type headers.
+mime_guess = "2"
+
+# PNG decoding — used by the `webview_frontend` example to load
+# `public/process.png` as the OS window icon.
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 [profile.release]
 opt-level = 3
 lto = true
