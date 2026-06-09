@@ -82,9 +82,9 @@ export default function ExtractionPage() {
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('fr-FR', {
+    return new Intl.NumberFormat('fr-TN', {
       style: 'currency',
-      currency: 'EUR',
+      currency: 'TND',
     }).format(value);
   };
 

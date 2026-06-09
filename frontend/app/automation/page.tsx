@@ -7,7 +7,7 @@ import { useToast } from '@/lib/toast';
 import { useAppContext } from '@/lib/context';
 
 export default function AutomationPage() {
-  const { extractedDoc } = useAppContext();
+  const { extractedDoc, cdpPort } = useAppContext();
   const [formulas, setFormulas] = useState<Formula[]>([]);
   const [selectedFormulaId, setSelectedFormulaId] = useState<string | null>(null);
   const [autoSave, setAutoSave] = useState(false);
@@ -70,13 +70,16 @@ export default function AutomationPage() {
 
     setIsFillLoading(true);
     addLog('Initializing PWA Automation Filler...', 'info');
-    addLog(`Targeting Axeane PWA with ${extractedDoc.rows.length} entries.`, 'info');
+    
+    const cdpPort = parseInt(localStorage.getItem('CDP_PORT') || '9222');
+    addLog(`Targeting Axeane PWA with ${extractedDoc.rows.length} entries on port ${cdpPort}.`, 'info');
 
     try {
       const req = {
         document: extractedDoc,
         formula_id: selectedFormulaId || undefined,
         auto_save: autoSave,
+        cdp_port: cdpPort,
       };
       const result = await apiClient.fillPwa(req);
       

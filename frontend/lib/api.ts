@@ -304,6 +304,11 @@ export class ApiClient {
       body: JSON.stringify(req),
     });
   }
+
+  async discoverNgModels(cdpPort?: number): Promise<{ count: number; ng_models: any[] }> {
+    const query = cdpPort ? `?cdp_port=${cdpPort}` : '';
+    return this.request(`/automation/discover${query}`);
+  }
 }
 
 // Create singleton instance

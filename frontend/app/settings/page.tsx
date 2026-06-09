@@ -1,29 +1,50 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Blocks, Server, Eye, Sliders, Info, Save, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Blocks, Server, Eye, Sliders, Info, Save, RefreshCw, CheckCircle, AlertCircle, Search } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/lib/toast';
 import { useAppContext } from '@/lib/context';
 
 export default function SettingsPage() {
-  const { apiUrl, setApiUrl } = useAppContext();
+  const { apiUrl, setApiUrl, cdpPort, setCdpPort } = useAppContext();
   const [localApiUrl, setLocalApiUrl] = useState(apiUrl);
+  const [localCdpPort, setLocalCdpPort] = useState(cdpPort);
   const [isTesting, setIsTesting] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(false);
   const [healthStatus, setHealthStatus] = useState<'idle' | 'online' | 'offline'>('idle');
-  const { success, error, warning } = useToast();
+  const [ngModels, setNgModels] = useState<{tag: string, ngModel: string, type: string, id: string}[] | null>(null);
+  const { success, error, warning, info } = useToast();
 
   useEffect(() => {
     setLocalApiUrl(apiUrl);
+    const savedPort = localStorage.getItem('CDP_PORT');
+    if (savedPort) setLocalCdpPort(Number(savedPort));
   }, [apiUrl]);
 
   const handleSave = () => {
     setApiUrl(localApiUrl);
+    setCdpPort(localCdpPort);
     apiClient.setBaseUrl(localApiUrl);
-    success('Settings saved', 'API configuration updated successfully.');
+    localStorage.setItem('CDP_PORT', String(localCdpPort));
+    success('Settings saved', 'API and CDP configuration updated successfully.');
   };
 
-  const testConnection = async () => {
+  const handleDiscover = async () => {
+    setIsDiscovering(true);
+    setNgModels(null);
+    try {
+      const res = await fetch(`${localApiUrl}/automation/discover?cdp_port=${localCdpPort}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Discovery failed');
+      setNgModels(data.ng_models);
+      success('Discovery complete', `Found ${data.count} ng-model fields on the page.`);
+    } catch (err) {
+      error('Discovery failed', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
     setIsTesting(true);
     setHealthStatus('idle');
     try {
@@ -144,6 +165,32 @@ export default function SettingsPage() {
             </h3>
             <div className="space-y-6">
               <div>
+                <label className="block text-body-sm font-body-sm text-on-surface mb-2" htmlFor="cdp-port">
+                  CDP Remote Debug Port
+                </label>
+                <div className="flex gap-3">
+                  <input
+                    className="w-full bg-surface-container-highest border border-outline-variant rounded-md px-4 py-2 text-data-mono font-data-mono text-primary focus:outline-none focus:border-primary"
+                    id="cdp-port"
+                    type="number"
+                    value={localCdpPort}
+                    onChange={(e) => setLocalCdpPort(Number(e.target.value))}
+                    placeholder="9222"
+                  />
+                  <button
+                    onClick={handleDiscover}
+                    disabled={isDiscovering}
+                    className="px-4 py-2 bg-surface-container-high border border-outline-variant rounded-md text-body-sm font-semibold text-on-surface hover:bg-surface-container-highest transition-all flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {isDiscovering ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                    Discover
+                  </button>
+                </div>
+                <p className="text-[11px] text-on-surface-variant mt-1">
+                  Open the Saisie des écritures form in the PWA first, then click Discover.
+                </p>
+              </div>
+              <div>
                 <div className="flex justify-between items-center mb-2">
                   <label className="block text-body-sm font-body-sm text-on-surface" htmlFor="delay">Type Speed Delay (ms)</label>
                   <span className="text-data-mono font-data-mono text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">50</span>
@@ -156,6 +203,37 @@ export default function SettingsPage() {
               </div>
             </div>
           </section>
+
+          {ngModels && (
+            <section className="bg-surface-container rounded-lg border border-outline-variant p-lg">
+              <h3 className="text-label-caps font-label-caps text-secondary mb-4 flex items-center gap-2 uppercase tracking-wider">
+                <Eye className="w-4 h-4" />
+                Discovered ng-models ({ngModels.length})
+              </h3>
+              <div className="overflow-auto max-h-64 rounded border border-outline-variant">
+                <table className="w-full text-xs font-mono">
+                  <thead className="bg-surface-container-high sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-on-surface-variant">Tag</th>
+                      <th className="px-3 py-2 text-left text-on-surface-variant">ng-model</th>
+                      <th className="px-3 py-2 text-left text-on-surface-variant">Type</th>
+                      <th className="px-3 py-2 text-left text-on-surface-variant">ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ngModels.map((m, i) => (
+                      <tr key={i} className="border-t border-outline-variant hover:bg-surface-container-high">
+                        <td className="px-3 py-1.5 text-on-surface-variant">{m.tag}</td>
+                        <td className="px-3 py-1.5 text-primary">{m.ngModel}</td>
+                        <td className="px-3 py-1.5 text-on-surface-variant">{m.type}</td>
+                        <td className="px-3 py-1.5 text-on-surface-variant">{m.id}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           <div className="bg-surface-container-high p-4 rounded-lg border border-outline-variant">
             <div className="flex items-start gap-3">
