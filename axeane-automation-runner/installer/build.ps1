@@ -21,7 +21,8 @@ function Die($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 # Step 1: Build Next.js static export 
 Log "Building Next.js frontend (static export)..." 
 Push-Location $FrontendDir 
-    npm ci 
+    # Use npm install instead of npm ci to be more resilient to locked files on Windows
+    npm install 
     npm run build 
     if (-not (Test-Path "out\index.html")) { 
         Die "next build did not produce out/index.html. Make sure output: export is set in next.config.js" 
