@@ -67,17 +67,10 @@
        </Component> 
      </ComponentGroup> 
   
-     <!-- Python embeddable runtime (entire python/ folder) --> 
-     <ComponentGroup Id="CG_Python" Directory="PYTHON_DIR"> 
-       <Component Id="C_Python" Guid="*"> 
-         <File Id="F_PythonExe" Source="..\build\python\python.exe" KeyPath="yes" /> 
-       </Component> 
-       <!-- All other python files harvested via heat or inline below --> 
-       <Component Id="C_PythonFiles" Guid="*"> 
-         <!-- WiX heat will expand this; for now use a wildcard reference --> 
-         <File Id="F_PythonDll" Source="..\build\python\python311.dll" /> 
-       </Component> 
-     </ComponentGroup> 
+     <!-- Python embeddable runtime (entire python/ folder harvested) -->
+     <ComponentGroup Id="CG_Python" Directory="PYTHON_DIR">
+       <Files Include="..\build\python\**" />
+     </ComponentGroup>
   
       <!-- Backend Python source -->
       <ComponentGroup Id="CG_Backend" Directory="BACKEND_DIR">
@@ -141,12 +134,10 @@
         </Component>
       </ComponentGroup>
   
-     <!-- Frontend static export --> 
-     <ComponentGroup Id="CG_Frontend" Directory="FRONTEND_OUT"> 
-       <Component Id="C_FrontendIndex" Guid="*"> 
-         <File Id="F_IndexHtml" Source="..\..\frontend\out\index.html" KeyPath="yes" /> 
-       </Component> 
-     </ComponentGroup> 
+     <!-- Frontend static export (entire out/ folder harvested) -->
+     <ComponentGroup Id="CG_Frontend" Directory="FRONTEND_OUT">
+       <Files Include="..\..\frontend\out\**" />
+     </ComponentGroup>
   
      <!-- Start Menu shortcut --> 
      <ComponentGroup Id="CG_Shortcuts" Directory="AXEANE_MENU"> 
