@@ -314,7 +314,7 @@ export default function FormulasPage() {
                             placeholder="411000"
                           />
                         </div>
-                        <div className="col-span-3">
+                        <div className="col-span-2">
                           <label className="text-[10px] uppercase text-on-surface-variant mb-1 block">Libellé Template</label>
                           <input
                             type="text"
@@ -336,6 +336,17 @@ export default function FormulasPage() {
                           </select>
                         </div>
                         <div className="col-span-2">
+                          <label className="text-[10px] uppercase text-on-surface-variant mb-1 block">Sens (AC)</label>
+                          <select
+                            value={line.sens_avoir}
+                            onChange={(e) => handleUpdateLine(idx, 'sens_avoir', e.target.value)}
+                            className="w-full bg-surface-container-high border border-outline-variant rounded px-2 py-1 text-sm text-on-surface"
+                          >
+                            <option value={SensType.debit}>DEBIT</option>
+                            <option value={SensType.credit}>CREDIT</option>
+                          </select>
+                        </div>
+                        <div className="col-span-2">
                           <label className="text-[10px] uppercase text-on-surface-variant mb-1 block">Montant Source</label>
                           <select
                             value={line.montant_source}
@@ -347,7 +358,7 @@ export default function FormulasPage() {
                             <option value="tva">TVA</option>
                           </select>
                         </div>
-                        <div className="col-span-2 flex justify-end">
+                        <div className="col-span-1 flex justify-end">
                           <button
                             onClick={() => handleRemoveLine(idx)}
                             className="p-1.5 text-on-surface-variant hover:text-error"
