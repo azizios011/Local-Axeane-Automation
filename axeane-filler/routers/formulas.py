@@ -5,7 +5,7 @@ from storage import formulas_store
 router = APIRouter(prefix="/formulas", tags=["formulas"])
 
 
-@router.get("/", response_model=list[Formula])
+@router.get("", response_model=list[Formula])
 def list_formulas():
     return formulas_store.list_formulas()
 
@@ -18,7 +18,7 @@ def get_formula(formula_id: str):
     return formula
 
 
-@router.post("/", response_model=Formula, status_code=201)
+@router.post("", response_model=Formula, status_code=201)
 def create_formula(payload: FormulaCreate):
     return formulas_store.create_formula(payload)
 
