@@ -83,6 +83,14 @@ Log "Dependencies installed"
 Log "Building MSI installer..." 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null 
  
+# Ensure WiX extensions are installed 
+Log "Adding WiX UI extension..." 
+try {
+    wix extension add WixToolset.UI.wixext --global
+} catch {
+    # If already added, ignore
+}
+
 $wixArgs = @(
     "build", "$RunnerDir\installer\axeane.wxs",
     "-o", "$OutDir\Axeane-Automation-Setup.msi",
