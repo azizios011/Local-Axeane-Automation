@@ -65,11 +65,14 @@ Log "Python ready at $PythonDir"
  
 # Step 4: Install backend dependencies 
 Log "Installing Python dependencies into embedded Python..." 
-& "$PythonDir\python.exe" -m pip install ` 
-    -r "$BackendDir\requirements.txt" ` 
-    --target "$PythonDir\Lib\site-packages" ` 
-    --no-warn-script-location ` 
-    --quiet 
+$pipArgs = @(
+    "-m", "pip", "install",
+    "-r", "$BackendDir\requirements.txt",
+    "--target", "$PythonDir\Lib\site-packages",
+    "--no-warn-script-location",
+    "--quiet"
+)
+& "$PythonDir\python.exe" @pipArgs
  
 Log "Installing Playwright browser (chromium)..." 
 & "$PythonDir\python.exe" -m playwright install chromium 
@@ -79,9 +82,12 @@ Log "Dependencies installed"
 Log "Building MSI installer..." 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null 
  
-wix build "$RunnerDir\installer\axeane.wxs" ` 
-    -o "$OutDir\Axeane-Automation-Setup.msi" ` 
-    -ext WixToolset.UI.wixext 
+$wixArgs = @(
+    "build", "$RunnerDir\installer\axeane.wxs",
+    "-o", "$OutDir\Axeane-Automation-Setup.msi",
+    "-ext", "WixToolset.UI.wixext"
+)
+wix @wixArgs
  
 if (-not (Test-Path "$OutDir\Axeane-Automation-Setup.msi")) { 
     Die "WiX build failed - MSI not produced" 
