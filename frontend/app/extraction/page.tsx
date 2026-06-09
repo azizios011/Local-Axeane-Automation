@@ -233,7 +233,8 @@ export default function ExtractionPage() {
                   </span>
                 </h2>
               </div>
-              <div className="flex gap-sm">
+            </div>
+            <div className="flex gap-sm">
                 <button
                   onClick={() => router.push('/automation')}
                 className="border border-primary/50 text-primary hover:bg-primary/10 rounded-lg px-4 py-2 text-label-caps font-label-caps transition-colors flex items-center gap-2 focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:ring-offset-surface shadow-[0_0_10px_rgba(78,222,163,0.1)]"
