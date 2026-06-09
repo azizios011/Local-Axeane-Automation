@@ -20,6 +20,7 @@
 //!     no orphan service is left running.
 
 use std::io::{BufRead, BufReader};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::OnceLock;
@@ -78,9 +79,24 @@ pub struct LogLine {
 
 /// Spawn the Python sidecar and wait until the FastAPI `/health`
 /// endpoint responds OK (or the configured timeout elapses).
+///
+/// If the backend is **already listening on the configured port**
+/// (e.g. installed as a Windows Service via `tools/install_service.ps1`),
+/// we skip spawning and directly wait for health — zero startup latency.
 pub fn spawn_and_wait(app: &AppHandle, config: &AppConfig) -> Result<()> {
     // Kill any previous instance whose PID file we still have on disk.
     cleanup_stale_pid(&config.backend_pid_path);
+
+    // -------- Check if the backend is already running (service mode) --------
+    if port_is_open(config.backend_port) {
+        info!(
+            "Backend already listening on port {} — assuming Windows Service mode, skipping spawn",
+            config.backend_port
+        );
+        wait_for_health(&config.health_url(), config.health_timeout_secs)?;
+        info!("Python sidecar (service) is healthy on {}", config.backend_url());
+        return Ok(());
+    }
 
     info!(
         "Spawning Python sidecar: {} --host 127.0.0.1 --port {}",
@@ -229,6 +245,13 @@ fn spawn_via_command(
     }
 
     Ok((rx, pid, None, Some(child)))
+}
+
+/// Check if a TCP port on 127.0.0.1 is already open.
+fn port_is_open(port: u16) -> bool {
+    use std::time::Duration;
+    let addr = std::net::SocketAddrV4::new(std::net::Ipv4Addr::new(127, 0, 0, 1), port);
+    TcpStream::connect_timeout(&addr.into(), Duration::from_millis(300)).is_ok()
 }
 
 /// Locate the sidecar binary on disk. We look in every plausible
