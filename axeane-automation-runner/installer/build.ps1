@@ -91,12 +91,14 @@ try {
     # If already added, ignore
 }
 
-$wixArgs = @(
-    "build", "$RunnerDir\installer\axeane.wxs",
-    "-o", "$OutDir\Axeane-Automation-Setup.msi",
-    "-ext", "WixToolset.UI.wixext"
-)
-wix @wixArgs
+Push-Location "$RunnerDir\installer"
+    $wixArgs = @(
+        "build", "axeane.wxs",
+        "-o", "$OutDir\Axeane-Automation-Setup.msi",
+        "-ext", "WixToolset.UI.wixext"
+    )
+    wix @wixArgs
+Pop-Location
  
 if (-not (Test-Path "$OutDir\Axeane-Automation-Setup.msi")) { 
     Die "WiX build failed - MSI not produced" 
