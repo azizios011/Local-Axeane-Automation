@@ -7,7 +7,7 @@ authors = ["Axeane"]
  
 [[bin]] 
 name = "axeane-automation" 
-path = "main.rs" 
+path = "src/main.rs" 
  
 [dependencies] 
 # Async runtime 
