@@ -19,3 +19,16 @@ frontend/out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Rust build artifacts 
+axeane-automation-runner/target/ 
+axeane-automation-runner/build/ 
+
+# MSI output 
+dist/ 
+
+# Next.js static export 
+frontend/out/ 
+
+# Python embeddable cache 
+*.zip 
