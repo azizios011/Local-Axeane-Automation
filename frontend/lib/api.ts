@@ -194,6 +194,21 @@ export class ApiClient {
     file: File,
     onProgress?: (progress: number) => void,
   ): Promise<ExtractedDocument> {
+    return this.uploadFile<ExtractedDocument>('/extraction/pdf', file, onProgress);
+  }
+
+  async extractCsv(
+    file: File,
+    onProgress?: (progress: number) => void,
+  ): Promise<ExtractedDocument> {
+    return this.uploadFile<ExtractedDocument>('/extraction/csv', file, onProgress);
+  }
+
+  private async uploadFile<T>(
+    endpoint: string,
+    file: File,
+    onProgress?: (progress: number) => void,
+  ): Promise<T> {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -237,7 +252,7 @@ export class ApiClient {
         reject(new Error('Upload cancelled'));
       });
 
-      const url = `${this.baseUrl}/extraction/pdf`;
+      const url = `${this.baseUrl}${endpoint}`;
       xhr.open('POST', url, true);
       xhr.send(formData);
     });

@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 
 export default function ExtractionPage() {
   const { extractedDoc, setExtractedDoc } = useAppContext();
+  const [importMode, setImportMode] = useState<'pdf' | 'csv'>('pdf');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -23,8 +24,9 @@ export default function ExtractionPage() {
   const paginatedRows = extractedDoc?.rows.slice(startIndex, endIndex) || [];
 
   const handleFileSelect = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      error('Invalid file', 'Please upload a PDF file');
+    const extension = importMode === 'csv' ? '.csv' : '.pdf';
+    if (!file.name.toLowerCase().endsWith(extension)) {
+      error('Invalid file', `Please upload a ${importMode.toUpperCase()} file`);
       return;
     }
 
@@ -32,14 +34,15 @@ export default function ExtractionPage() {
     setUploadProgress(0);
 
     try {
-      const result = await apiClient.extractPdf(file, (progress) => {
-        setUploadProgress(Math.round(progress));
-      });
+      const result = await (importMode === 'csv'
+        ? apiClient.extractCsv(file, (progress) => setUploadProgress(Math.round(progress)))
+        : apiClient.extractPdf(file, (progress) => setUploadProgress(Math.round(progress))));
+      
       setExtractedDoc(result);
       setCurrentPage(1);
-      success('PDF extracted successfully', `Found ${result.rows.length} invoice rows`);
+      success(`${importMode.toUpperCase()} extracted successfully`, `Found ${result.rows.length} invoice rows`);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to extract PDF';
+      const errorMessage = err instanceof Error ? err.message : `Failed to extract ${importMode.toUpperCase()}`;
       error('Extraction failed', errorMessage);
       console.error('Extraction error:', err);
     } finally {
@@ -76,7 +79,8 @@ export default function ExtractionPage() {
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${extractedDoc.filename.replace('.pdf', '')}_extracted.json`;
+    const extension = importMode === 'csv' ? '.csv' : '.pdf';
+    link.download = `${extractedDoc.filename.replace(extension, '')}_extracted.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -93,8 +97,33 @@ export default function ExtractionPage() {
       <div className="flex justify-between items-end mb-sm">
         <div>
           <h1 className="text-display-lg font-display-lg text-on-surface">Invoice Extraction</h1>
-          <p className="text-body-md font-body-md text-on-surface-variant mt-1">Upload PDF invoices to extract structured accounting data.</p>
+          <p className="text-body-md font-body-md text-on-surface-variant mt-1">Upload PDF or CSV invoices to extract structured accounting data.</p>
         </div>
+      </div>
+
+      <div className="flex gap-2 mb-2">
+        <button
+          onClick={() => setImportMode('pdf')}
+          className={`px-4 py-2 rounded-md text-label-caps font-label-caps transition-all flex items-center gap-2 ${
+            importMode === 'pdf'
+              ? 'bg-primary text-on-primary shadow-[0_0_15px_rgba(78,222,163,0.3)]'
+              : 'bg-surface-container-high text-on-surface-variant border border-outline-variant hover:text-on-surface'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          PDF (via LLM)
+        </button>
+        <button
+          onClick={() => setImportMode('csv')}
+          className={`px-4 py-2 rounded-md text-label-caps font-label-caps transition-all flex items-center gap-2 ${
+            importMode === 'csv'
+              ? 'bg-primary text-on-primary shadow-[0_0_15px_rgba(78,222,163,0.3)]'
+              : 'bg-surface-container-high text-on-surface-variant border border-outline-variant hover:text-on-surface'
+          }`}
+        >
+          <FileUp className="w-4 h-4" />
+          CSV (direct import)
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
@@ -107,7 +136,7 @@ export default function ExtractionPage() {
         >
           <input
             ref={fileInputRef}
-            accept=".pdf"
+            accept={importMode === 'csv' ? '.csv' : '.pdf'}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             type="file"
             onChange={handleInputChange}
@@ -122,7 +151,7 @@ export default function ExtractionPage() {
               )}
             </div>
             <p className="text-headline-sm font-headline-sm text-on-surface mb-xs">
-              {isLoading ? 'Processing...' : 'Drag & Drop PDF here'}
+              {isLoading ? 'Processing...' : `Drag & Drop ${importMode.toUpperCase()} here`}
             </p>
             <p className="text-body-sm font-body-sm text-on-surface-variant mb-lg">
               {isLoading ? `${uploadProgress}% complete` : 'or click to browse from your computer'}
@@ -135,7 +164,7 @@ export default function ExtractionPage() {
                   fileInputRef.current?.click();
                 }}
               >
-                Select PDF
+                Select {importMode.toUpperCase()}
               </button>
             )}
           </div>
@@ -173,7 +202,7 @@ export default function ExtractionPage() {
             )}
             {!extractedDoc && (
               <p className="text-body-sm font-body-sm text-on-surface-variant mb-4">
-                Upload a PDF to get started
+                Upload a {importMode.toUpperCase()} to get started
               </p>
             )}
           </div>
