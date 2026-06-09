@@ -3,7 +3,7 @@ mod error;
 mod launcher; 
 
 use config::AppConfig; 
-use launcher::{backend, browser, frontend, health}; 
+use launcher::{spawn_backend, stop_backend, open_browser, serve_frontend, wait_for_backend}; 
 use tracing::{error, info}; 
 
 #[tokio::main] 
@@ -41,31 +41,31 @@ async fn run() -> error::Result<()> {
     info!("Install dir : {}", config.install_dir.display()); 
     info!("Backend     : {}", config.backend_url()); 
     info!("Frontend    : {}", config.frontend_url()); 
-
+ 
     // 2. Spawn embedded Python / uvicorn backend 
-    let backend_process = backend::spawn_backend(&config)?; 
-
+    let backend_process = spawn_backend(&config)?; 
+ 
     // 3. Poll health endpoint until backend is ready 
-    health::wait_for_backend(&config.health_url(), config.health_timeout_secs).await 
+    wait_for_backend(&config.health_url(), config.health_timeout_secs).await 
         .inspect_err(|_| { 
             // Kill the backend if health check fails so we don't leave orphan processes 
             info!("Health check failed — killing backend process"); 
         })?; 
-
+ 
     // 4. Serve Next.js static export in a background task 
     let frontend_out = config.frontend_out_dir.clone(); 
     let frontend_port = config.frontend_port; 
     tokio::spawn(async move { 
-        if let Err(e) = frontend::serve_frontend(frontend_out, frontend_port).await { 
+        if let Err(e) = serve_frontend(frontend_out, frontend_port).await { 
             error!("Frontend server crashed: {}", e); 
         } 
     }); 
-
+ 
     // Small pause so frontend server is bound before we open the browser 
     tokio::time::sleep(std::time::Duration::from_millis(300)).await; 
-
+ 
     // 5. Open the app in the default browser 
-    browser::open_browser(&config.frontend_url()).await?; 
+    open_browser(&config.frontend_url()).await?; 
 
     info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"); 
     info!("App is running. Press Ctrl+C to stop."); 
@@ -77,7 +77,7 @@ async fn run() -> error::Result<()> {
         .expect("Failed to listen for Ctrl+C"); 
 
     info!("Shutting down..."); 
-    backend::stop_backend(backend_process); 
+    stop_backend(backend_process); 
     info!("Goodbye."); 
 
     Ok(()) 

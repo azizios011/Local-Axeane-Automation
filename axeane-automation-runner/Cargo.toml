@@ -15,8 +15,8 @@ tokio = { version = "1", features = ["full"] }
  
 # HTTP server for serving static frontend 
 axum = "0.7" 
-tower-http = { version = "0.5", features = ["fs", "cors"] } 
-tower = "0.4" 
+tower-http = { version = "0.6", features = ["fs", "cors"] } 
+tower = "0.5" 
  
 # HTTP client for health checks 
 reqwest = { version = "0.12", features = ["json"] } 
