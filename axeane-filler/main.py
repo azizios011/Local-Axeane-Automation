@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import formulas, extraction, automation
+from routers import formulas, extraction, automation, health
 
 app = FastAPI(
     title="Axeane Kompta Filler",
@@ -17,11 +17,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(health.router)
 app.include_router(formulas.router)
 app.include_router(extraction.router)
 app.include_router(automation.router)
 
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+@app.get("/")
+def root():
+    return {"message": "Axeane Automation Backend is running"}

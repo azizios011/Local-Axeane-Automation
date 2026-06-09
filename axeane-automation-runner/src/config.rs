@@ -40,7 +40,7 @@ impl AppConfig {
             python_exe: install_dir.join("python").join("python.exe"), 
             backend_dir: install_dir.join("backend"), 
             frontend_out_dir: install_dir.join("frontend").join("out"), 
-            backend_port: 8000, 
+            backend_port: 8080, 
             frontend_port: 3000, 
             health_timeout_secs: 60, 
             install_dir, 
