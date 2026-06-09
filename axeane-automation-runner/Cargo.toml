@@ -1,25 +1,44 @@
 [package]
 name = "axeane-automation-runner"
-version = "1.3.0"
+version = "1.4.0"
 edition = "2021"
-description = "Axeane Kompta Automation - self-contained launcher"
+description = "Axeane Kompta Automation - Tauri 2 desktop host"
 authors = ["Axeane"]
+default-run = "axeane-automation-runner"
 
 [[bin]]
-name = "axeane-automation"
+name = "axeane-automation-runner"
 path = "src/main.rs"
+
+# Tauri 2 looks for [package.metadata.bundle] to default parts of the
+# bundle configuration. We keep it minimal — tauri.conf.json is the
+# source of truth.
+[package.metadata.bundle]
+identifier = "com.axeane.automation"
+publisher   = "Axeane"
+category    = "BusinessApplication"
+short_description = "Axeane Kompta Automation Bridge"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# HTTP server for serving static frontend
+# Tauri 2 runtime + plugins
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+
+# HTTP client for health checks against the sidecar
+reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "rustls-tls"] }
+
+# HTTP server for serving the static frontend (fallback / dev preview
+# path — in production Tauri loads frontendDist directly via the
+# asset protocol).
 axum = "0.7"
 tower-http = { version = "0.6", features = ["fs", "cors"] }
 tower = "0.5"
-
-# HTTP client for health checks
-reqwest = { version = "0.12", features = ["json"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -36,17 +55,11 @@ thiserror = "1"
 # Path utilities
 dirs = "5"
 
-# Native WebView2 window for the Automation Bridge (replaces Edge --app=)
-wry = "0.55"
-tao = { version = "0.35", features = ["rwh_06"] }
+# Synchronisation primitives
+parking_lot = "0.12"
 
 [dev-dependencies]
-# Static file MIME detection — used by the `webview_frontend` example to
-# serve the Next.js static export with the correct Content-Type headers.
 mime_guess = "2"
-
-# PNG decoding — used by the `webview_frontend` example to load
-# `public/process.png` as the OS window icon.
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 [profile.release]

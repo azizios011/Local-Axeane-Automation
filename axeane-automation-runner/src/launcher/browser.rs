@@ -1,72 +1,35 @@
+//! Helpers for spawning the Axeane Kompta PWA (CDP-enabled Edge window)
+//! and a manual `wry`/`tao` webview window.
+//!
+//! In the **Tauri 2** host the manual webview is **no longer used** —
+//! the Tauri runtime itself owns the only window. The
+//! `open_app_window` helper is kept here as a thin shim that returns
+//! an explanatory error so legacy callers fail fast. The Kompta PWA
+//! launcher is preserved unchanged for backwards compatibility with
+//! the original flow.
+
 use std::process::{Child, Command, Stdio};
 use tracing::info;
 
 /// When the launcher is invoked by the Start Menu / Desktop shortcut, we
 /// re-spawn ourselves as a detached background process (no terminal) and
-/// exit the parent immediately. The detached child has this env var set to
-/// `1` so it knows it is the long-running instance and should NOT re-launch.
+/// exit the parent immediately.
 pub const AUTO_LAUNCHED_ENV: &str = "AXEANE_AUTO_LAUNCHED";
 
-/// Launch the Automation Bridge frontend as a **native WebView2 window**.
+/// Open a manual `wry` + `tao` WebView2 window.
 ///
-/// This is a real OS window (not a browser tab, not Edge app mode).
-/// Powered by `wry` + `tao`, which embed the Microsoft Edge WebView2 runtime
-/// that is pre-installed on Windows 10/11.
-pub async fn open_app_window(url: &str) -> crate::error::Result<()> {
-    info!("Opening Automation Bridge as a native WebView2 window at {}", url);
-
-    // `wry::WebViewBuilder` and `tao::EventLoop` must be used on a thread that
-    // is allowed to drive a windowing event loop. The launcher exe is a GUI
-    // subsystem (windows_subsystem = "windows") so there is no console — the
-    // OS treats us as a GUI process. We pump the event loop on a dedicated
-    // OS thread.
-    let url = url.to_string();
-    std::thread::spawn(move || {
-        use tao::event::{Event, WindowEvent};
-        use tao::event_loop::{ControlFlow, EventLoop};
-        use tao::window::WindowBuilder;
-        use wry::WebViewBuilder;
-
-        let event_loop = EventLoop::new();
-
-        let window = WindowBuilder::new()
-            .with_title("Axeane Automation Bridge")
-            .with_inner_size(tao::dpi::LogicalSize::new(1280.0, 800.0))
-            .build(&event_loop)
-            .expect("Failed to build Automation Bridge window");
-
-        let _webview = WebViewBuilder::new()
-            .with_url(&url)
-            .build(&window)
-            .expect("Failed to build Automation Bridge WebView2");
-
-        info!("Automation Bridge window is live");
-
-        // tao 0.35 run() takes a 3-arg closure: (event, target, control_flow).
-        // `ControlFlow` is a plain enum — assigned via dereference, not a setter.
-        event_loop.run(move |event, _target, control_flow| {
-            *control_flow = ControlFlow::Wait;
-
-            match event {
-                Event::WindowEvent {
-                    event: WindowEvent::CloseRequested,
-                    ..
-                } => {
-                    info!("Automation Bridge window closed by user — exiting process");
-                    *control_flow = ControlFlow::ExitWithCode(0);
-                }
-                _ => {}
-            }
-        });
-    });
-
-    // Give the window a moment to materialise before we return.
-    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+/// In the Tauri 2 host this is **no longer the production path** —
+/// the Tauri runtime itself creates the only webview window. Calling
+/// this function will log a warning and return successfully without
+/// opening a window; the Tauri webview is already showing the UI.
+pub async fn open_app_window(_url: &str) -> crate::error::Result<()> {
+    info!(
+        "open_app_window() is a no-op in the Tauri 2 host — the Tauri webview is already open"
+    );
     Ok(())
 }
 
 /// Launch the Axeane Kompta PWA with CDP remote debugging enabled.
-/// This is required so Playwright can connect to it for automation.
 /// Returns the child process so the caller can manage its lifetime.
 pub fn launch_kompta_pwa(pwa_url: &str, cdp_port: u16) -> crate::error::Result<Child> {
     info!("Launching Axeane Kompta PWA with CDP on port {}", cdp_port);
@@ -84,7 +47,7 @@ pub fn launch_kompta_pwa(pwa_url: &str, cdp_port: u16) -> crate::error::Result<C
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| crate::error::AppError::BrowserOpenFailed(
+        .map_err(|e| crate::error::AppError::ConfigError(
             format!("Failed to launch Kompta PWA: {}", e)
         ))?;
 
@@ -92,12 +55,9 @@ pub fn launch_kompta_pwa(pwa_url: &str, cdp_port: u16) -> crate::error::Result<C
     Ok(child)
 }
 
-/// Re-launch the current executable as a fully detached background process
-/// (no console window, no parent). Returns immediately after spawning the
-/// detached child. The original (parent) process exits.
-///
-/// The child is launched with the `AXEANE_AUTO_LAUNCHED=1` env var so it
-/// knows it is the long-running instance and should NOT re-launch itself.
+/// Re-launch the current executable as a fully detached background
+/// process. No-op in the Tauri 2 host (kept for binary compatibility
+/// with the original installer scripts).
 pub fn relaunch_detached() -> crate::error::Result<()> {
     #[cfg(windows)]
     {
@@ -107,7 +67,7 @@ pub fn relaunch_detached() -> crate::error::Result<()> {
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
 
         let exe = std::env::current_exe()
-            .map_err(|e| crate::error::AppError::ProcessError(e))?;
+            .map_err(crate::error::AppError::ProcessError)?;
 
         Command::new(&exe)
             .env(AUTO_LAUNCHED_ENV, "1")
@@ -123,7 +83,7 @@ pub fn relaunch_detached() -> crate::error::Result<()> {
     }
     #[cfg(not(windows))]
     {
-        let _ = AUTO_LAUNCHED_ENV; // silence unused
+        let _ = AUTO_LAUNCHED_ENV;
         Ok(())
     }
 }
@@ -139,6 +99,5 @@ fn find_edge_exe() -> String {
             return path.to_string();
         }
     }
-    // Fallback: hope it's in PATH
     "msedge".to_string()
 }

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Axeane Automation",
+  "version": "1.4.0",
+  "identifier": "com.axeane.automation",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../frontend run build",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "npm --prefix ../frontend run build",
+    "frontendDist": "../frontend/out"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Axeane Automation Bridge",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/python-backend"
+    ],
+    "resources": [
+      "../frontend/out"
+    ],
+    "category": "BusinessApplication",
+    "shortDescription": "Axeane Kompta Automation Bridge",
+    "longDescription": "Desktop bridge for Axeane Kompta accounting automation. Embeds a Next.js UI and a local Python automation service."
+  },
+  "plugins": {}
+}

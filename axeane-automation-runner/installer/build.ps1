@@ -1,108 +1,76 @@
-Set-StrictMode -Version Latest 
-$ErrorActionPreference = "Stop" 
- 
-$RepoRoot       = Resolve-Path "$PSScriptRoot\..\.." 
-$RunnerDir      = "$RepoRoot\axeane-automation-runner" 
-$FrontendDir    = "$RepoRoot\frontend" 
-$BackendDir     = "$RepoRoot\axeane-filler" 
-$BuildDir       = "$RunnerDir\build" 
-$PythonDir      = "$BuildDir\python" 
-$ReleaseExe     = "$RunnerDir\target\release\axeane-automation.exe" 
-$OutDir         = "$RepoRoot\dist" 
- 
-$PythonVersion  = "3.11.9" 
-$PythonZipUrl   = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip" 
-$PythonZipPath  = "$BuildDir\python-embed.zip" 
-$PipUrl         = "https://bootstrap.pypa.io/get-pip.py" 
- 
-function Log($msg) { Write-Host "==> $msg" -ForegroundColor Cyan } 
-function Die($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 } 
- 
-# Step 1: Build Next.js static export 
-Log "Building Next.js frontend (static export)..." 
-Push-Location $FrontendDir 
-    # Use npm install instead of npm ci to be more resilient to locked files on Windows
-    npm install 
-    npm run build 
-    if (-not (Test-Path "out\index.html")) { 
-        Die "next build did not produce out/index.html. Make sure output: export is set in next.config.js" 
-    } 
-Pop-Location 
-Log "Frontend build complete" 
- 
-# Step 2: Build Rust binary 
-Log "Building Rust binary (release)..." 
-Push-Location $RunnerDir 
-    cargo build --release 
-    if (-not (Test-Path $ReleaseExe)) { 
-        Die "Rust build failed - exe not found at $ReleaseExe" 
-    } 
-Pop-Location 
-Log "Rust build complete" 
- 
-# Step 3: Download + prepare embedded Python 
-New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null 
- 
-if (-not (Test-Path "$PythonDir\python.exe")) { 
-    Log "Downloading Python $PythonVersion embeddable..." 
-    Invoke-WebRequest -Uri $PythonZipUrl -OutFile $PythonZipPath 
-    Expand-Archive -Path $PythonZipPath -DestinationPath $PythonDir -Force 
-    Remove-Item $PythonZipPath 
- 
-    $pthFile = Get-ChildItem "$PythonDir\*._pth" | Select-Object -First 1 
-    if ($pthFile) { 
-        $content = Get-Content $pthFile.FullName -Raw 
-        $content = $content -replace '#import site', 'import site' 
-        Set-Content $pthFile.FullName $content 
-        Log "Patched $($pthFile.Name) to enable site-packages" 
-    } 
- 
-    Log "Installing pip into embedded Python..." 
-    Invoke-WebRequest -Uri $PipUrl -OutFile "$BuildDir\get-pip.py" 
-    & "$PythonDir\python.exe" "$BuildDir\get-pip.py" --no-warn-script-location 
-    Remove-Item "$BuildDir\get-pip.py" 
-} 
-Log "Python ready at $PythonDir" 
- 
-# Step 4: Install backend dependencies 
-Log "Installing Python dependencies into embedded Python..." 
-$pipArgs = @(
-    "-m", "pip", "install",
-    "-r", "$BackendDir\requirements.txt",
-    "--target", "$PythonDir\Lib\site-packages",
-    "--no-warn-script-location",
-    "--quiet"
-)
-& "$PythonDir\python.exe" @pipArgs
- 
-Log "Installing Playwright browser (chromium)..." 
-& "$PythonDir\python.exe" -m playwright install chromium 
-Log "Dependencies installed" 
- 
-# Step 5: Build MSI with WiX v4 
-Log "Building MSI installer..." 
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null 
- 
-# Ensure WiX extensions are installed 
-Log "Adding WiX UI extension..." 
-try {
-    wix extension add WixToolset.UI.wixext --global
-} catch {
-    # If already added, ignore
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+# ============================================================================
+# Axeane Automation — Tauri 2 build pipeline
+# ============================================================================
+#
+# What this script does (end to end):
+#   1. Build the Next.js static export (frontend/out/).
+#   2. Bundle the Python backend into a single-file PyInstaller binary
+#      and place it in axeane-automation-runner/binaries/python-backend-<triple>.exe.
+#   3. Run `cargo tauri build` to produce the signed installer for the
+#      current host platform.
+#   4. Copy the installer to <repo>/dist/ for handoff.
+#
+# Prerequisites:
+#   * Node 18+
+#   * Rust stable (with `cargo install tauri-cli --version '^2'`)
+#   * Python 3.11+ (a venv at axeane-filler/venv/ is recommended)
+#   * For MSI: `dotnet tool install --global wix`
+# ============================================================================
+
+$RepoRoot    = Resolve-Path "$PSScriptRoot\..\.."
+$RunnerDir   = "$RepoRoot\axeane-automation-runner"
+$FrontendDir = "$RepoRoot\frontend"
+$OutDir      = "$RepoRoot\dist"
+
+function Log($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
+function Die($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
+
+# ---- Step 1: Next.js static export ------------------------------------------
+Log "Step 1/4 — Building Next.js frontend (static export)..."
+Push-Location $FrontendDir
+    npm install
+    npm run build
+    if (-not (Test-Path "out\index.html")) {
+        Die "next build did not produce out/index.html. Make sure output: 'export' is set in next.config.ts"
+    }
+Pop-Location
+Log "Frontend build complete (frontend/out/)"
+
+# ---- Step 2: Python sidecar --------------------------------------------------
+Log "Step 2/4 — Bundling Python backend as a Tauri sidecar..."
+& "$RepoRoot\tools\build_python_sidecar.ps1"
+if ($LASTEXITCODE -ne 0) { Die "Sidecar build failed (exit $LASTEXITCODE)" }
+
+# ---- Step 3: Tauri build -----------------------------------------------------
+Log "Step 3/4 — Running cargo tauri build..."
+Push-Location $RunnerDir
+    cargo tauri build
+    if ($LASTEXITCODE -ne 0) { Die "cargo tauri build failed (exit $LASTEXITCODE)" }
+Pop-Location
+Log "Tauri build complete"
+
+# ---- Step 4: Stage installer -------------------------------------------------
+Log "Step 4/4 — Staging installer in $OutDir..."
+New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+
+# Tauri writes the installer(s) to <RunnerDir>/target/release/bundle/.
+$BundleRoot = "$RunnerDir\target\release\bundle"
+if (Test-Path $BundleRoot) {
+    Get-ChildItem -Path $BundleRoot -Recurse -File -Filter "*.msi" |
+        Copy-Item -Destination $OutDir -Force
+    Get-ChildItem -Path $BundleRoot -Recurse -File -Filter "*.exe" |
+        Copy-Item -Destination $OutDir -Force
+    Get-ChildItem -Path $BundleRoot -Recurse -File -Filter "*.deb" |
+        Copy-Item -Destination $OutDir -Force
+    Get-ChildItem -Path $BundleRoot -Recurse -File -Filter "*.AppImage" |
+        Copy-Item -Destination $OutDir -Force
+    Get-ChildItem -Path $BundleRoot -Recurse -File -Filter "*.dmg" |
+        Copy-Item -Destination $OutDir -Force
 }
 
-Push-Location "$RunnerDir\installer"
-    $wixArgs = @(
-        "build", "axeane.wxs",
-        "-o", "$OutDir\Axeane-Automation-Setup.msi",
-        "-ext", "WixToolset.UI.wixext"
-    )
-    wix @wixArgs
-Pop-Location
- 
-if (-not (Test-Path "$OutDir\Axeane-Automation-Setup.msi")) { 
-    Die "WiX build failed - MSI not produced" 
-} 
- 
-Log "Build complete!" 
-Log "Installer: $OutDir\Axeane-Automation-Setup.msi" 
+Log ""
+Log "Build complete!"
+Get-ChildItem -Path $OutDir -File | Format-Table Name, Length -AutoSize
