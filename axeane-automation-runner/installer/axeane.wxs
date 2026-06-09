@@ -79,15 +79,67 @@
        </Component> 
      </ComponentGroup> 
   
-     <!-- Backend Python source --> 
-     <ComponentGroup Id="CG_Backend" Directory="BACKEND_DIR"> 
-       <Component Id="C_BackendMain" Guid="*"> 
-         <File Id="F_MainPy" Source="..\..\axeane-filler\main.py" KeyPath="yes" /> 
-       </Component> 
-       <Component Id="C_BackendConfig" Guid="*"> 
-         <File Id="F_ConfigPy" Source="..\..\axeane-filler\config.py" KeyPath="yes" /> 
-       </Component> 
-     </ComponentGroup> 
+      <!-- Backend Python source -->
+      <ComponentGroup Id="CG_Backend" Directory="BACKEND_DIR">
+        <Component Id="C_BackendMain" Guid="*">
+          <File Id="F_MainPy" Source="..\..\axeane-filler\main.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendConfig" Guid="*">
+          <File Id="F_ConfigPy" Source="..\..\axeane-filler\config.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendRoutersInit" Guid="*">
+          <File Id="F_RoutersInit" Source="..\..\axeane-filler\routers\__init__.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendServicesInit" Guid="*">
+          <File Id="F_ServicesInit" Source="..\..\axeane-filler\services\__init__.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendModelsInit" Guid="*">
+          <File Id="F_ModelsInit" Source="..\..\axeane-filler\models\__init__.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendStorageInit" Guid="*">
+          <File Id="F_StorageInit" Source="..\..\axeane-filler\storage\__init__.py" KeyPath="yes" />
+        </Component>
+        <!-- Routers -->
+        <Component Id="C_BackendHealth" Directory="BACKEND_ROUTERS" Guid="*">
+          <File Id="F_Health" Source="..\..\axeane-filler\routers\health.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendFormulas" Directory="BACKEND_ROUTERS" Guid="*">
+          <File Id="F_Formulas" Source="..\..\axeane-filler\routers\formulas.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendExtraction" Directory="BACKEND_ROUTERS" Guid="*">
+          <File Id="F_Extraction" Source="..\..\axeane-filler\routers\extraction.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendAutomation" Directory="BACKEND_ROUTERS" Guid="*">
+          <File Id="F_Automation" Source="..\..\axeane-filler\routers\automation.py" KeyPath="yes" />
+        </Component>
+        <!-- Services -->
+        <Component Id="C_BackendCsvImporter" Directory="BACKEND_SERVICES" Guid="*">
+          <File Id="F_CsvImporter" Source="..\..\axeane-filler\services\csv_importer.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendPwaFiller" Directory="BACKEND_SERVICES" Guid="*">
+          <File Id="F_PwaFiller" Source="..\..\axeane-filler\services\pwa_filler.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendFormulaEngine" Directory="BACKEND_SERVICES" Guid="*">
+          <File Id="F_FormulaEngine" Source="..\..\axeane-filler\services\formula_engine.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendPdfExtractor" Directory="BACKEND_SERVICES" Guid="*">
+          <File Id="F_PdfExtractor" Source="..\..\axeane-filler\services\pdf_extractor.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendLlmClient" Directory="BACKEND_SERVICES" Guid="*">
+          <File Id="F_LlmClient" Source="..\..\axeane-filler\services\llm_client.py" KeyPath="yes" />
+        </Component>
+        <!-- Models -->
+        <Component Id="C_BackendInvoice" Directory="BACKEND_MODELS" Guid="*">
+          <File Id="F_Invoice" Source="..\..\axeane-filler\models\invoice.py" KeyPath="yes" />
+        </Component>
+        <Component Id="C_BackendFormula" Directory="BACKEND_MODELS" Guid="*">
+          <File Id="F_Formula" Source="..\..\axeane-filler\models\formula.py" KeyPath="yes" />
+        </Component>
+        <!-- Storage -->
+        <Component Id="C_BackendFormulasStore" Directory="BACKEND_STORAGE" Guid="*">
+          <File Id="F_FormulasStore" Source="..\..\axeane-filler\storage\formulas_store.py" KeyPath="yes" />
+        </Component>
+      </ComponentGroup>
   
      <!-- Frontend static export --> 
      <ComponentGroup Id="CG_Frontend" Directory="FRONTEND_OUT"> 
