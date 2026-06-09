@@ -195,16 +195,18 @@ export default function ExtractionPage() {
       {extractedDoc && (
         <div className="bg-surface-container border border-outline-variant rounded-xl overflow-hidden mt-md">
           <div className="px-lg py-md border-b border-outline-variant flex flex-col sm:flex-row justify-between items-center gap-4 bg-surface-container-high">
-            <div>
-              <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
-                Extraction Results
-                <span className="bg-surface-container-highest text-on-surface-variant border border-outline-variant rounded-full px-3 py-1 text-label-caps font-label-caps ml-2">
-                  {extractedDoc.rows.length} Rows
-                </span>
-              </h2>
-            </div>
-              <button
-                onClick={() => router.push('/automation')}
+            <div className="flex items-center gap-sm">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-headline-sm font-headline-sm text-on-surface flex items-center gap-2">
+                  Extraction Results
+                  <span className="bg-surface-container-highest text-on-surface-variant border border-outline-variant rounded-full px-3 py-1 text-label-caps font-label-caps ml-2">
+                    {extractedDoc.rows.length} Rows
+                  </span>
+                </h2>
+              </div>
+              <div className="flex gap-sm">
+                <button
+                  onClick={() => router.push('/automation')}
                 className="border border-primary/50 text-primary hover:bg-primary/10 rounded-lg px-4 py-2 text-label-caps font-label-caps transition-colors flex items-center gap-2 focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:ring-offset-surface shadow-[0_0_10px_rgba(78,222,163,0.1)]"
               >
                 <Zap className="w-[18px] h-[18px]" />
