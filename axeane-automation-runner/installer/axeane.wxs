@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+ <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"> 
+  
+   <Package 
+     Name="Axeane Automation" 
+     Manufacturer="Axeane" 
+     Version="1.0.0" 
+     UpgradeCode="4F3A2B1C-0001-0001-0001-000000000001" 
+     ProductCode="*" 
+     Language="1033" 
+     Codepage="1252" 
+     InstallerVersion="500" 
+     Compressed="yes" 
+     Scope="perMachine"> 
+  
+     <!-- Allow clean upgrades --> 
+     <MajorUpgrade 
+       DowngradeErrorMessage="A newer version of Axeane Automation is already installed." 
+       Schedule="afterInstallInitialize" /> 
+  
+     <MediaTemplate EmbedCab="yes" CompressionLevel="high" /> 
+  
+     <!-- ================================================================ 
+          PROPERTIES 
+          ================================================================ --> 
+     <Property Id="ARPPRODUCTICON" Value="axeane.ico" /> 
+     <Property Id="ARPHELPLINK" Value="https://axeane.tn" /> 
+     <Property Id="ARPURLINFOABOUT" Value="https://axeane.tn" /> 
+  
+     <!-- ================================================================ 
+          DIRECTORY STRUCTURE 
+          ================================================================ --> 
+     <StandardDirectory Id="ProgramFiles6432Folder"> 
+       <Directory Id="AXEANE_ROOT" Name="Axeane Automation"> 
+         <Directory Id="PYTHON_DIR" Name="python" /> 
+         <Directory Id="BACKEND_DIR" Name="backend"> 
+           <Directory Id="BACKEND_ROUTERS" Name="routers" /> 
+           <Directory Id="BACKEND_SERVICES" Name="services" /> 
+           <Directory Id="BACKEND_MODELS" Name="models" /> 
+           <Directory Id="BACKEND_STORAGE" Name="storage" /> 
+           <Directory Id="BACKEND_DATA" Name="data" /> 
+         </Directory> 
+         <Directory Id="FRONTEND_DIR" Name="frontend"> 
+           <Directory Id="FRONTEND_OUT" Name="out" /> 
+         </Directory> 
+       </Directory> 
+     </StandardDirectory> 
+  
+     <StandardDirectory Id="ProgramMenuFolder"> 
+       <Directory Id="AXEANE_MENU" Name="Axeane Automation" /> 
+     </StandardDirectory> 
+  
+     <StandardDirectory Id="DesktopFolder" /> 
+  
+     <!-- ================================================================ 
+          COMPONENTS 
+          ================================================================ --> 
+  
+     <!-- Main executable --> 
+     <ComponentGroup Id="CG_Executable" Directory="AXEANE_ROOT"> 
+       <Component Id="C_Executable" Guid="*"> 
+         <File 
+           Id="F_Executable" 
+           Source="..\target\release\axeane-automation.exe" 
+           KeyPath="yes" /> 
+       </Component> 
+     </ComponentGroup> 
+  
+     <!-- Python embeddable runtime (entire python/ folder) --> 
+     <ComponentGroup Id="CG_Python" Directory="PYTHON_DIR"> 
+       <Component Id="C_Python" Guid="*"> 
+         <File Id="F_PythonExe" Source="..\build\python\python.exe" KeyPath="yes" /> 
+       </Component> 
+       <!-- All other python files harvested via heat or inline below --> 
+       <Component Id="C_PythonFiles" Guid="*"> 
+         <!-- WiX heat will expand this; for now use a wildcard reference --> 
+         <File Id="F_PythonDll" Source="..\build\python\python311.dll" /> 
+       </Component> 
+     </ComponentGroup> 
+  
+     <!-- Backend Python source --> 
+     <ComponentGroup Id="CG_Backend" Directory="BACKEND_DIR"> 
+       <Component Id="C_BackendMain" Guid="*"> 
+         <File Id="F_MainPy" Source="..\..\axeane-filler\main.py" KeyPath="yes" /> 
+       </Component> 
+       <Component Id="C_BackendConfig" Guid="*"> 
+         <File Id="F_ConfigPy" Source="..\..\axeane-filler\config.py" KeyPath="yes" /> 
+       </Component> 
+     </ComponentGroup> 
+  
+     <!-- Frontend static export --> 
+     <ComponentGroup Id="CG_Frontend" Directory="FRONTEND_OUT"> 
+       <Component Id="C_FrontendIndex" Guid="*"> 
+         <File Id="F_IndexHtml" Source="..\..\frontend\out\index.html" KeyPath="yes" /> 
+       </Component> 
+     </ComponentGroup> 
+  
+     <!-- Start Menu shortcut --> 
+     <ComponentGroup Id="CG_Shortcuts" Directory="AXEANE_MENU"> 
+       <Component Id="C_StartMenuShortcut" Guid="*"> 
+         <Shortcut 
+           Id="S_StartMenu" 
+           Name="Axeane Automation" 
+           Description="Launch Axeane Kompta Automation" 
+           Target="[AXEANE_ROOT]axeane-automation.exe" 
+           WorkingDirectory="AXEANE_ROOT" /> 
+         <RemoveFolder Id="RF_StartMenu" On="uninstall" /> 
+         <RegistryValue 
+           Root="HKCU" 
+           Key="Software\Axeane\Automation" 
+           Name="StartMenuShortcut" 
+           Type="integer" 
+           Value="1" 
+           KeyPath="yes" /> 
+       </Component> 
+     </ComponentGroup> 
+  
+     <!-- Desktop shortcut --> 
+     <ComponentGroup Id="CG_Desktop" Directory="DesktopFolder"> 
+       <Component Id="C_DesktopShortcut" Guid="*"> 
+         <Shortcut 
+           Id="S_Desktop" 
+           Name="Axeane Automation" 
+           Description="Launch Axeane Kompta Automation" 
+           Target="[AXEANE_ROOT]axeane-automation.exe" 
+           WorkingDirectory="AXEANE_ROOT" /> 
+         <RegistryValue 
+           Root="HKCU" 
+           Key="Software\Axeane\Automation" 
+           Name="DesktopShortcut" 
+           Type="integer" 
+           Value="1" 
+           KeyPath="yes" /> 
+       </Component> 
+     </ComponentGroup> 
+  
+     <!-- ================================================================ 
+          FEATURES 
+          ================================================================ --> 
+     <Feature Id="F_Complete" Title="Axeane Automation" Level="1"> 
+       <ComponentGroupRef Id="CG_Executable" /> 
+       <ComponentGroupRef Id="CG_Python" /> 
+       <ComponentGroupRef Id="CG_Backend" /> 
+       <ComponentGroupRef Id="CG_Frontend" /> 
+       <ComponentGroupRef Id="CG_Shortcuts" /> 
+       <ComponentGroupRef Id="CG_Desktop" /> 
+     </Feature> 
+  
+     <!-- ================================================================ 
+          UI 
+          ================================================================ --> 
+     <UIRef Id="WixUI_InstallDir" /> 
+     <Property Id="WIXUI_INSTALLDIR" Value="AXEANE_ROOT" /> 
+  
+     <!-- ================================================================ 
+          LAUNCH AFTER INSTALL 
+          ================================================================ --> 
+     <CustomAction 
+       Id="CA_LaunchApp" 
+       FileRef="F_Executable" 
+       ExeCommand="" 
+       Execute="immediate" 
+       Impersonate="yes" 
+       Return="asyncNoWait" /> 
+  
+     <InstallExecuteSequence> 
+       <Custom Action="CA_LaunchApp" After="InstallFinalize"> 
+         NOT Installed AND NOT REMOVE 
+       </Custom> 
+     </InstallExecuteSequence> 
+  
+   </Package> 
+ </Wix> 
