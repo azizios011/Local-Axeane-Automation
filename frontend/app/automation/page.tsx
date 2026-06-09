@@ -72,15 +72,15 @@ export default function AutomationPage() {
     addLog('Initializing PWA Automation Filler...', 'info');
     
     const cdpPort = parseInt(localStorage.getItem('CDP_PORT') || '9222');
+    const req = {
+      document: extractedDoc,
+      formula_id: selectedFormulaId || undefined,
+      auto_save: autoSave,
+      cdp_port: cdpPort,
+    };
     addLog(`Targeting Axeane PWA with ${extractedDoc.rows.length} entries on port ${cdpPort}.`, 'info');
 
     try {
-      const req = {
-        document: extractedDoc,
-        formula_id: selectedFormulaId || undefined,
-        auto_save: autoSave,
-        cdp_port: cdpPort,
-      };
       const result = await apiClient.fillPwa(req);
       
       if (result.success) {
