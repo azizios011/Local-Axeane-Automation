@@ -87,16 +87,16 @@
         <Component Id="C_BackendConfig" Guid="*">
           <File Id="F_ConfigPy" Source="..\..\axeane-filler\config.py" KeyPath="yes" />
         </Component>
-        <Component Id="C_BackendRoutersInit" Guid="*">
+        <Component Id="C_BackendRoutersInit" Guid="{A1B2C3D4-1001-4001-8001-000000000001}">
           <File Id="F_RoutersInit" Source="..\..\axeane-filler\routers\__init__.py" KeyPath="yes" />
         </Component>
-        <Component Id="C_BackendServicesInit" Guid="*">
+        <Component Id="C_BackendServicesInit" Guid="{A1B2C3D4-1001-4001-8001-000000000002}">
           <File Id="F_ServicesInit" Source="..\..\axeane-filler\services\__init__.py" KeyPath="yes" />
         </Component>
-        <Component Id="C_BackendModelsInit" Guid="*">
+        <Component Id="C_BackendModelsInit" Guid="{A1B2C3D4-1001-4001-8001-000000000003}">
           <File Id="F_ModelsInit" Source="..\..\axeane-filler\models\__init__.py" KeyPath="yes" />
         </Component>
-        <Component Id="C_BackendStorageInit" Guid="*">
+        <Component Id="C_BackendStorageInit" Guid="{A1B2C3D4-1001-4001-8001-000000000004}">
           <File Id="F_StorageInit" Source="..\..\axeane-filler\storage\__init__.py" KeyPath="yes" />
         </Component>
         <!-- Routers -->
