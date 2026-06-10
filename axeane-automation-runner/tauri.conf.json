@@ -42,7 +42,12 @@
     ],
     "category": "BusinessApplication",
     "shortDescription": "Axeane Kompta Automation Bridge",
-    "longDescription": "Desktop bridge for Axeane Kompta accounting automation. Embeds a Next.js UI and a local Python automation service."
+    "longDescription": "Desktop bridge for Axeane Kompta accounting automation. Embeds a Next.js UI and a local Python automation service.",
+    "windows": {
+      "wix": {
+        "template": "installer/axeane.wxs"
+      }
+    }
   },
   "plugins": {}
 }

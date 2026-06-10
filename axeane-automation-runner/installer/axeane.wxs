@@ -1,215 +1,363 @@
-<?xml version="1.0" encoding="UTF-8"?> 
- <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Axeane Automation — WiX v4 installer
+  ======================================
+  Install order (enforced via CustomAction sequencing):
+    1. Files are staged to disk (InstallFiles)
+    2. CA_InstallService  — registers python-backend.exe as Windows Service
+                            (AxeaneAutomationBackend) via sc.exe
+    3. CA_StartService    — starts the service
+    4. CA_WaitForHealth   — polls http://127.0.0.1:8080/health for up to 30 s
+    5. InstallFinalize    — WiX finalises the install
+    6. CA_LaunchApp       — launches the Tauri webview app (asyncNoWait)
+
+  Uninstall order:
+    1. CA_StopService     — stops the service (Before InstallInitialize)
+    2. CA_UninstallService — removes the service registration
+    3. WiX removes files
+
+  Notes:
+  - Requires WiX v4 (`dotnet tool install --global wix`).
+  - The python-backend sidecar MUST be built by
+    tools/build_python_sidecar.ps1 before running `cargo tauri build`.
+  - nssm.exe is NOT used here — plain sc.exe is sufficient and avoids
+    a third-party dependency in the installer itself.
+  - The health-check CA uses PowerShell so no extra binary is needed.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  
-   <Package 
-     Name="Axeane Automation" 
-     Manufacturer="Axeane" 
-     Version="1.0.0" 
-     UpgradeCode="4F3A2B1C-0001-0001-0001-000000000001" 
-     ProductCode="*" 
-     Language="1033" 
-     Codepage="1252" 
-     InstallerVersion="500" 
-     Compressed="yes" 
-     Scope="perMachine"> 
-  
-     <!-- Allow clean upgrades --> 
-     <MajorUpgrade 
-       DowngradeErrorMessage="A newer version of Axeane Automation is already installed." 
-       Schedule="afterInstallInitialize" /> 
-  
-     <MediaTemplate EmbedCab="yes" CompressionLevel="high" /> 
-  
-     <!-- ================================================================ 
-          PROPERTIES 
-          ================================================================ --> 
-     <Property Id="ARPPRODUCTICON" Value="axeane.ico" /> 
-     <Property Id="ARPHELPLINK" Value="https://axeane.tn" /> 
-     <Property Id="ARPURLINFOABOUT" Value="https://axeane.tn" /> 
-  
-     <!-- ================================================================ 
-          DIRECTORY STRUCTURE 
-          ================================================================ --> 
-     <StandardDirectory Id="ProgramFiles6432Folder"> 
-       <Directory Id="AXEANE_ROOT" Name="Axeane Automation"> 
-         <Directory Id="PYTHON_DIR" Name="python" /> 
-         <Directory Id="BACKEND_DIR" Name="backend"> 
-           <Directory Id="BACKEND_ROUTERS" Name="routers" /> 
-           <Directory Id="BACKEND_SERVICES" Name="services" /> 
-           <Directory Id="BACKEND_MODELS" Name="models" /> 
-           <Directory Id="BACKEND_STORAGE" Name="storage" /> 
-           <Directory Id="BACKEND_DATA" Name="data" /> 
-         </Directory> 
-         <Directory Id="FRONTEND_DIR" Name="frontend"> 
-           <Directory Id="FRONTEND_OUT" Name="out" /> 
-         </Directory> 
-       </Directory> 
-     </StandardDirectory> 
-  
-     <StandardDirectory Id="ProgramMenuFolder"> 
-       <Directory Id="AXEANE_MENU" Name="Axeane Automation" /> 
-     </StandardDirectory> 
-  
-     <StandardDirectory Id="DesktopFolder" /> 
-  
-     <!-- ================================================================ 
-          COMPONENTS 
-          ================================================================ --> 
-  
-     <!-- Main executable --> 
-     <ComponentGroup Id="CG_Executable" Directory="AXEANE_ROOT"> 
-       <Component Id="C_Executable" Guid="*"> 
-         <File 
-           Id="F_Executable" 
-           Source="..\target\release\axeane-automation.exe" 
-           KeyPath="yes" /> 
-       </Component> 
-     </ComponentGroup> 
-  
-     <!-- Python embeddable runtime (entire python/ folder harvested) -->
-     <ComponentGroup Id="CG_Python" Directory="PYTHON_DIR">
-       <Files Include="..\build\python\**" />
-     </ComponentGroup>
-  
-      <!-- Backend Python source -->
-      <ComponentGroup Id="CG_Backend" Directory="BACKEND_DIR">
-        <Component Id="C_BackendMain" Guid="*">
-          <File Id="F_MainPy" Source="..\..\axeane-filler\main.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendConfig" Guid="*">
-          <File Id="F_ConfigPy" Source="..\..\axeane-filler\config.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendRoutersInit" Guid="{A1B2C3D4-1001-4001-8001-000000000001}">
-          <File Id="F_RoutersInit" Source="..\..\axeane-filler\routers\__init__.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendServicesInit" Guid="{A1B2C3D4-1001-4001-8001-000000000002}">
-          <File Id="F_ServicesInit" Source="..\..\axeane-filler\services\__init__.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendModelsInit" Guid="{A1B2C3D4-1001-4001-8001-000000000003}">
-          <File Id="F_ModelsInit" Source="..\..\axeane-filler\models\__init__.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendStorageInit" Guid="{A1B2C3D4-1001-4001-8001-000000000004}">
-          <File Id="F_StorageInit" Source="..\..\axeane-filler\storage\__init__.py" KeyPath="yes" />
-        </Component>
-        <!-- Routers -->
-        <Component Id="C_BackendHealth" Directory="BACKEND_ROUTERS" Guid="*">
-          <File Id="F_Health" Source="..\..\axeane-filler\routers\health.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendFormulas" Directory="BACKEND_ROUTERS" Guid="*">
-          <File Id="F_Formulas" Source="..\..\axeane-filler\routers\formulas.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendExtraction" Directory="BACKEND_ROUTERS" Guid="*">
-          <File Id="F_Extraction" Source="..\..\axeane-filler\routers\extraction.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendAutomation" Directory="BACKEND_ROUTERS" Guid="*">
-          <File Id="F_Automation" Source="..\..\axeane-filler\routers\automation.py" KeyPath="yes" />
-        </Component>
-        <!-- Services -->
-        <Component Id="C_BackendCsvImporter" Directory="BACKEND_SERVICES" Guid="*">
-          <File Id="F_CsvImporter" Source="..\..\axeane-filler\services\csv_importer.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendPwaFiller" Directory="BACKEND_SERVICES" Guid="*">
-          <File Id="F_PwaFiller" Source="..\..\axeane-filler\services\pwa_filler.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendFormulaEngine" Directory="BACKEND_SERVICES" Guid="*">
-          <File Id="F_FormulaEngine" Source="..\..\axeane-filler\services\formula_engine.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendPdfExtractor" Directory="BACKEND_SERVICES" Guid="*">
-          <File Id="F_PdfExtractor" Source="..\..\axeane-filler\services\pdf_extractor.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendLlmClient" Directory="BACKEND_SERVICES" Guid="*">
-          <File Id="F_LlmClient" Source="..\..\axeane-filler\services\llm_client.py" KeyPath="yes" />
-        </Component>
-        <!-- Models -->
-        <Component Id="C_BackendInvoice" Directory="BACKEND_MODELS" Guid="*">
-          <File Id="F_Invoice" Source="..\..\axeane-filler\models\invoice.py" KeyPath="yes" />
-        </Component>
-        <Component Id="C_BackendFormula" Directory="BACKEND_MODELS" Guid="*">
-          <File Id="F_Formula" Source="..\..\axeane-filler\models\formula.py" KeyPath="yes" />
-        </Component>
-        <!-- Storage -->
-        <Component Id="C_BackendFormulasStore" Directory="BACKEND_STORAGE" Guid="*">
-          <File Id="F_FormulasStore" Source="..\..\axeane-filler\storage\formulas_store.py" KeyPath="yes" />
-        </Component>
-      </ComponentGroup>
-  
-     <!-- Frontend static export (entire out/ folder harvested) -->
-     <ComponentGroup Id="CG_Frontend" Directory="FRONTEND_OUT">
-       <Files Include="..\..\frontend\out\**" />
-     </ComponentGroup>
-  
-     <!-- Start Menu shortcut --> 
-     <ComponentGroup Id="CG_Shortcuts" Directory="AXEANE_MENU"> 
-       <Component Id="C_StartMenuShortcut" Guid="*"> 
-         <Shortcut 
-           Id="S_StartMenu" 
-           Name="Axeane Automation" 
-           Description="Launch Axeane Kompta Automation" 
-           Target="[AXEANE_ROOT]axeane-automation.exe" 
-           WorkingDirectory="AXEANE_ROOT" /> 
-         <RemoveFolder Id="RF_StartMenu" On="uninstall" /> 
-         <RegistryValue 
-           Root="HKCU" 
-           Key="Software\Axeane\Automation" 
-           Name="StartMenuShortcut" 
-           Type="integer" 
-           Value="1" 
-           KeyPath="yes" /> 
-       </Component> 
-     </ComponentGroup> 
-  
-     <!-- Desktop shortcut --> 
-     <ComponentGroup Id="CG_Desktop" Directory="DesktopFolder"> 
-       <Component Id="C_DesktopShortcut" Guid="*"> 
-         <Shortcut 
-           Id="S_Desktop" 
-           Name="Axeane Automation" 
-           Description="Launch Axeane Kompta Automation" 
-           Target="[AXEANE_ROOT]axeane-automation.exe" 
-           WorkingDirectory="AXEANE_ROOT" /> 
-         <RegistryValue 
-           Root="HKCU" 
-           Key="Software\Axeane\Automation" 
-           Name="DesktopShortcut" 
-           Type="integer" 
-           Value="1" 
-           KeyPath="yes" /> 
-       </Component> 
-     </ComponentGroup> 
-  
-     <!-- ================================================================ 
-          FEATURES 
-          ================================================================ --> 
-     <Feature Id="F_Complete" Title="Axeane Automation" Level="1"> 
-       <ComponentGroupRef Id="CG_Executable" /> 
-       <ComponentGroupRef Id="CG_Python" /> 
-       <ComponentGroupRef Id="CG_Backend" /> 
-       <ComponentGroupRef Id="CG_Frontend" /> 
-       <ComponentGroupRef Id="CG_Shortcuts" /> 
-       <ComponentGroupRef Id="CG_Desktop" /> 
-     </Feature> 
-  
-     <!-- ================================================================ 
-          UI 
-          ================================================================ --> 
-     <ui:WixUI 
-         Id="WixUI_InstallDir" 
-         InstallDirectory="AXEANE_ROOT" />
-     <!-- ================================================================ 
-          LAUNCH AFTER INSTALL 
-          ================================================================ --> 
-     <CustomAction 
-       Id="CA_LaunchApp" 
-       FileRef="F_Executable" 
-       ExeCommand="" 
-       Execute="immediate" 
-       Impersonate="yes" 
-       Return="asyncNoWait" /> 
-  
-     <InstallExecuteSequence> 
-       <Custom Action="CA_LaunchApp" After="InstallFinalize" Condition="NOT Installed AND NOT REMOVE" /> 
-     </InstallExecuteSequence> 
-  
-   </Package> 
- </Wix> 
+
+  <Package
+    Name="Axeane Automation"
+    Manufacturer="Axeane"
+    Version="1.4.0"
+    UpgradeCode="4F3A2B1C-0001-0001-0001-000000000001"
+    ProductCode="*"
+    Language="1033"
+    Codepage="1252"
+    InstallerVersion="500"
+    Compressed="yes"
+    Scope="perMachine">
+
+    <!-- Allow clean upgrades -->
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of Axeane Automation is already installed."
+      Schedule="afterInstallInitialize" />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- ================================================================
+         PROPERTIES
+         ================================================================ -->
+    <Property Id="ARPPRODUCTICON"  Value="axeane.ico" />
+    <Property Id="ARPHELPLINK"     Value="https://axeane.tn" />
+    <Property Id="ARPURLINFOABOUT" Value="https://axeane.tn" />
+
+    <!-- Port the backend listens on — can be overridden at install time:
+         msiexec /i axeane.msi BACKEND_PORT=9090                        -->
+    <Property Id="BACKEND_PORT" Value="8080" />
+
+    <!-- Service name — change once and all CAs pick it up automatically -->
+    <Property Id="SERVICE_NAME" Value="AxeaneAutomationBackend" />
+
+    <!-- ================================================================
+         DIRECTORY STRUCTURE
+         ================================================================ -->
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="AXEANE_ROOT" Name="Axeane Automation">
+        <Directory Id="BINARIES_DIR" Name="binaries" />
+        <Directory Id="FRONTEND_DIR" Name="frontend">
+          <Directory Id="FRONTEND_OUT" Name="out" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AXEANE_MENU" Name="Axeane Automation" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- ================================================================
+         COMPONENTS
+         ================================================================ -->
+
+    <!-- Main Tauri executable (the webview host) -->
+    <ComponentGroup Id="CG_Executable" Directory="AXEANE_ROOT">
+      <Component Id="C_Executable" Guid="*">
+        <File
+          Id="F_Executable"
+          Source="..\target\release\axeane-automation-runner.exe"
+          KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- PyInstaller-bundled python-backend sidecar
+         Tauri expects the triple-suffixed name in binaries/.
+         We install both the triple-suffixed copy (for Tauri) and a
+         plain python-backend.exe (for the Windows Service via sc.exe,
+         which doesn't know about target triples).              -->
+    <ComponentGroup Id="CG_Sidecar" Directory="BINARIES_DIR">
+      <Component Id="C_SidecarTriple" Guid="{B2C3D4E5-2001-4001-8001-000000000001}">
+        <!-- Triple-suffixed name — Tauri sidecar resolver needs this -->
+        <File
+          Id="F_SidecarTriple"
+          Source="..\binaries\python-backend-x86_64-pc-windows-msvc.exe"
+          Name="python-backend-x86_64-pc-windows-msvc.exe"
+          KeyPath="yes" />
+      </Component>
+      <Component Id="C_SidecarPlain" Guid="{B2C3D4E5-2001-4001-8001-000000000002}">
+        <!-- Plain name — sc.exe / Service Control Manager uses this -->
+        <File
+          Id="F_SidecarPlain"
+          Source="..\binaries\python-backend-x86_64-pc-windows-msvc.exe"
+          Name="python-backend.exe"
+          KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- nssm.exe bundled in tools\ — placed next to the main exe so
+         install_service.ps1 keeps working after a fresh install.
+         Remove this component if you do not ship nssm.              -->
+    <ComponentGroup Id="CG_Tools" Directory="AXEANE_ROOT">
+      <Component Id="C_Nssm" Guid="{B2C3D4E5-2001-4001-8001-000000000010}">
+        <File
+          Id="F_Nssm"
+          Source="..\..\tools\nssm.exe"
+          Name="nssm.exe"
+          KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Frontend static export (entire out/ folder harvested by WiX) -->
+    <ComponentGroup Id="CG_Frontend" Directory="FRONTEND_OUT">
+      <Files Include="..\..\..\frontend\out\**" />
+    </ComponentGroup>
+
+    <!-- Start Menu shortcut -->
+    <ComponentGroup Id="CG_Shortcuts" Directory="AXEANE_MENU">
+      <Component Id="C_StartMenuShortcut" Guid="*">
+        <Shortcut
+          Id="S_StartMenu"
+          Name="Axeane Automation"
+          Description="Launch Axeane Kompta Automation"
+          Target="[AXEANE_ROOT]axeane-automation-runner.exe"
+          WorkingDirectory="AXEANE_ROOT" />
+        <RemoveFolder Id="RF_StartMenu" On="uninstall" />
+        <RegistryValue
+          Root="HKCU"
+          Key="Software\Axeane\Automation"
+          Name="StartMenuShortcut"
+          Type="integer" Value="1"
+          KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Desktop shortcut -->
+    <ComponentGroup Id="CG_Desktop" Directory="DesktopFolder">
+      <Component Id="C_DesktopShortcut" Guid="*">
+        <Shortcut
+          Id="S_Desktop"
+          Name="Axeane Automation"
+          Description="Launch Axeane Kompta Automation"
+          Target="[AXEANE_ROOT]axeane-automation-runner.exe"
+          WorkingDirectory="AXEANE_ROOT" />
+        <RegistryValue
+          Root="HKCU"
+          Key="Software\Axeane\Automation"
+          Name="DesktopShortcut"
+          Type="integer" Value="1"
+          KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- ================================================================
+         FEATURES
+         ================================================================ -->
+    <Feature Id="F_Complete" Title="Axeane Automation" Level="1">
+      <ComponentGroupRef Id="CG_Executable" />
+      <ComponentGroupRef Id="CG_Sidecar" />
+      <ComponentGroupRef Id="CG_Tools" />
+      <ComponentGroupRef Id="CG_Frontend" />
+      <ComponentGroupRef Id="CG_Shortcuts" />
+      <ComponentGroupRef Id="CG_Desktop" />
+    </Feature>
+
+    <!-- ================================================================
+         CUSTOM ACTIONS
+         ================================================================
+         All deferred CAs run under LocalSystem (Impersonate="no") so
+         sc.exe has the privilege to create/delete services.
+         All rollback CAs are the mirror image of their install CA.
+         ================================================================ -->
+
+    <!-- ── INSTALL PHASE ───────────────────────────────────────────── -->
+
+    <!-- 1. Register the service (deferred, elevated) -->
+    <CustomAction
+      Id="CA_InstallService"
+      Execute="deferred"
+      Impersonate="no"
+      Return="check"
+      ExeCommand='sc.exe create "[SERVICE_NAME]" binPath= "[BINARIES_DIR]python-backend.exe --host 127.0.0.1 --port [BACKEND_PORT]" DisplayName= "Axeane Kompta Automation Backend" start= auto type= own error= normal' />
+
+    <!-- Rollback: remove the service if install fails after CA_InstallService -->
+    <CustomAction
+      Id="CA_InstallService_Rollback"
+      Execute="rollback"
+      Impersonate="no"
+      Return="ignore"
+      ExeCommand='sc.exe delete "[SERVICE_NAME]"' />
+
+    <!-- 2. Set service description (deferred, elevated) -->
+    <CustomAction
+      Id="CA_SetServiceDescription"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore"
+      ExeCommand='sc.exe description "[SERVICE_NAME]" "FastAPI backend for Axeane Kompta Automation. Listens on 127.0.0.1:[BACKEND_PORT]."' />
+
+    <!-- 3. Configure failure actions: restart the service after 5 s,
+            three times, then wait 1 minute before resetting the counter. -->
+    <CustomAction
+      Id="CA_SetServiceFailure"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore"
+      ExeCommand='sc.exe failure "[SERVICE_NAME]" reset= 60 actions= restart/5000/restart/5000/restart/5000' />
+
+    <!-- 4. Start the service -->
+    <CustomAction
+      Id="CA_StartService"
+      Execute="deferred"
+      Impersonate="no"
+      Return="check"
+      ExeCommand='net start "[SERVICE_NAME]"' />
+
+    <!-- Rollback: stop the service if install fails after CA_StartService -->
+    <CustomAction
+      Id="CA_StartService_Rollback"
+      Execute="rollback"
+      Impersonate="no"
+      Return="ignore"
+      ExeCommand='net stop "[SERVICE_NAME]"' />
+
+    <!-- 5. Wait for http://127.0.0.1:<PORT>/health to return 200 OK.
+            Uses PowerShell so no extra binary is required.
+            Tries for up to 30 seconds (15 attempts × 2 s sleep).
+            Returns exit code 1 if the backend never comes up,
+            which causes the install to roll back cleanly.           -->
+    <CustomAction
+      Id="CA_WaitForHealth"
+      Execute="deferred"
+      Impersonate="no"
+      Return="check"
+      ExeCommand='powershell.exe -NonInteractive -NoProfile -Command "$url=&apos;http://127.0.0.1:[BACKEND_PORT]/health&apos;; $ok=$false; for($i=0;$i-lt 15;$i++){try{$r=[Net.WebClient]::new().DownloadString($url);if($r -match &apos;ok|true&apos;){$ok=$true;break}}catch{};Start-Sleep 2}; if(-not $ok){exit 1}"' />
+
+    <!-- ── LAUNCH AFTER INSTALL ───────────────────────────────────── -->
+
+    <!-- 6. Launch the Tauri webview app (immediate, runs as current user,
+            async so the installer dialog closes promptly)             -->
+    <CustomAction
+      Id="CA_LaunchApp"
+      FileRef="F_Executable"
+      ExeCommand=""
+      Execute="immediate"
+      Impersonate="yes"
+      Return="asyncNoWait" />
+
+    <!-- ── UNINSTALL PHASE ──────────────────────────────────────────── -->
+
+    <!-- Stop the service before files are removed -->
+    <CustomAction
+      Id="CA_StopService"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore"
+      ExeCommand='net stop "[SERVICE_NAME]"' />
+
+    <!-- Delete the service registration -->
+    <CustomAction
+      Id="CA_UninstallService"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore"
+      ExeCommand='sc.exe delete "[SERVICE_NAME]"' />
+
+    <!-- ================================================================
+         SEQUENCES
+         ================================================================
+         Install sequence (after files are on disk):
+           InstallFiles
+             → CA_InstallService       (register service)
+             → CA_InstallService_Rollback (scheduled for rollback)
+             → CA_SetServiceDescription
+             → CA_SetServiceFailure
+             → CA_StartService         (start service)
+             → CA_StartService_Rollback
+             → CA_WaitForHealth        (block until /health → 200)
+           InstallFinalize
+             → CA_LaunchApp            (open the app, async)
+
+         Uninstall sequence (before files are removed):
+           InstallInitialize
+             → CA_StopService
+             → CA_UninstallService
+         ================================================================ -->
+
+    <InstallExecuteSequence>
+
+      <!-- ── Install ─────────────────────────────────────────────── -->
+      <Custom Action="CA_InstallService"
+              After="InstallFiles"
+              Condition="NOT Installed AND NOT REMOVE" />
+
+      <Custom Action="CA_InstallService_Rollback"
+              After="CA_InstallService"
+              Condition="NOT Installed AND NOT REMOVE" />
+
+      <Custom Action="CA_SetServiceDescription"
+              After="CA_InstallService"
+              Condition="NOT Installed AND NOT REMOVE" />
+
+      <Custom Action="CA_SetServiceFailure"
+              After="CA_SetServiceDescription"
+              Condition="NOT Installed AND NOT REMOVE" />
+
+      <Custom Action="CA_StartService"
+              After="CA_SetServiceFailure"
+              Condition="NOT Installed AND NOT REMOVE" />
+
+      <Custom Action="CA_StartService_Rollback"
+              After="CA_StartService"
+              Condition="NOT Installed AND NOT REMOVE" />
+
+      <Custom Action="CA_WaitForHealth"
+              After="CA_StartService"
+              Condition="NOT Installed AND NOT REMOVE" />
+
+      <!-- Launch the Tauri app after everything is finalised -->
+      <Custom Action="CA_LaunchApp"
+              After="InstallFinalize"
+              Condition="NOT Installed AND NOT REMOVE" />
+
+      <!-- ── Uninstall ────────────────────────────────────────────── -->
+      <Custom Action="CA_StopService"
+              After="InstallInitialize"
+              Condition="REMOVE~=&quot;ALL&quot;" />
+
+      <Custom Action="CA_UninstallService"
+              After="CA_StopService"
+              Condition="REMOVE~=&quot;ALL&quot;" />
+
+    </InstallExecuteSequence>
+
+    <!-- ================================================================
+         UI
+         ================================================================ -->
+    <ui:WixUI
+      Id="WixUI_InstallDir"
+      InstallDirectory="AXEANE_ROOT" />
+
+  </Package>
+</Wix>
