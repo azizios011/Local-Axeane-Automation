@@ -60,19 +60,17 @@ Ok "frontend/out/ is ready"
 # Step 2 — Python sidecar (PyInstaller)
 # ============================================================================
 Step 2 $TotalSteps "Bundling Python backend as a PyInstaller sidecar..."
-Log "Running tools\build_python_sidecar.ps1"
-& "$RepoRoot\tools\build_python_sidecar.ps1"
+powershell.exe -NonInteractive -NoProfile -ExecutionPolicy Bypass `
+    -File "$RepoRoot\tools\build_python_sidecar.ps1"
 if ($LASTEXITCODE -ne 0) { Die "Sidecar build failed (exit $LASTEXITCODE)" }
 
-# Explicit verification before passing control to Tauri
-$rustOut = & rustc -vV
-$Triple = ($rustOut | Select-String -Pattern '^host:\s*(\S+)' | ForEach-Object { $_.Matches[0].Groups[1].Value }) | Select-Object -First 1
-$SidecarFile = Join-Path $RunnerDir "binaries\python-backend-$Triple.exe"
-
-if (-not (Test-Path $SidecarFile)) {
-    Die "Sidecar binary not found at $SidecarFile. WiX will fail to bundle the service."
+# Verify the triple-suffixed binary exists — WiX needs the exact filename.
+$Triple     = "x86_64-pc-windows-msvc"
+$SidecarExe = "$RunnerDir\binaries\python-backend-$Triple.exe"
+if (-not (Test-Path $SidecarExe)) {
+    Die "Expected sidecar binary not found: $SidecarExe`nCheck tools\build_python_sidecar.ps1"
 }
-Ok "Sidecar is ready: $(Split-Path $SidecarFile -Leaf)"
+Ok "Sidecar: $SidecarExe"
 
 # ============================================================================
 # Step 3 — Tauri build (MSI generation)
