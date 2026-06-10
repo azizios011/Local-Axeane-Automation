@@ -49,8 +49,8 @@ $ErrorActionPreference = 'Stop'
 # ---------------------------------------------------------------------------
 $RepoRoot     = Resolve-Path (Join-Path $PSScriptRoot '..')
 $BackendDir   = Join-Path $RepoRoot 'axeane-filler'
-$SpecFile     = Join-Path $RepoRoot 'tools' 'axeane-filler.spec'
-$BinariesDir  = Join-Path $RepoRoot 'axeane-automation-runner' 'binaries'
+$SpecFile     = Join-Path (Join-Path $RepoRoot 'tools') 'axeane-filler.spec'
+$BinariesDir  = Join-Path (Join-Path $RepoRoot 'axeane-automation-runner') 'binaries'
 $DistDir      = Join-Path $BackendDir 'dist'
 $BuildDir     = Join-Path $BackendDir 'build'
 
@@ -94,7 +94,7 @@ if ($Clean) {
 # 3. Activate the venv (or fall back to system python)
 # ---------------------------------------------------------------------------
 $Venv = Join-Path $BackendDir 'venv'
-$VenvActivate = Join-Path $Venv 'Scripts' 'Activate.ps1'
+$VenvActivate = Join-Path (Join-Path $Venv 'Scripts') 'Activate.ps1'
 if (Test-Path $VenvActivate) {
     Write-Host "[sidecar] Activating venv at $Venv" -ForegroundColor Cyan
     . $VenvActivate
@@ -103,8 +103,8 @@ if (Test-Path $VenvActivate) {
 }
 
 # Make sure PyInstaller is installed
-$pyinst = (Get-Command pyinstaller -ErrorAction SilentlyContinue)
-if (-not $pyinst) {
+$pyinst = python -c "import PyInstaller" 2>$null
+if ($LASTEXITCODE -ne 0) {
     Write-Host "[sidecar] PyInstaller not found - installing..." -ForegroundColor Yellow
     python -m pip install --upgrade pip | Out-Null
     python -m pip install pyinstaller | Out-Null
@@ -124,7 +124,7 @@ if (Test-Path (Join-Path $BackendDir 'requirements.txt')) {
 Write-Host "[sidecar] Running pyinstaller..." -ForegroundColor Cyan
 Push-Location $BackendDir
 try {
-    pyinstaller --noconfirm --clean $SpecFile
+    python -m PyInstaller --noconfirm --clean $SpecFile
     if ($LASTEXITCODE -ne 0) {
         throw "pyinstaller exited with code $LASTEXITCODE"
     }
