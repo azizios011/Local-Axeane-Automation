@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tracing::{error, info};
 
 use crate::config::AppConfig;
@@ -55,12 +55,18 @@ pub fn spawn_sidecar_and_wait(
         .spawn(move || match sidecar::spawn_and_wait(&app_clone, &config) {
             Ok(()) => {
                 *ready_handle.lock() = true;
-                info!("Setup: sidecar is ready, webview may now load data");
+                info!("Setup: sidecar is ready — showing main window");
+                if let Some(win) = app_clone.get_webview_window("main") {
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
             }
             Err(e) => {
                 error!("Setup: sidecar failed to start: {e:#}");
-                // We deliberately do not bail out: the UI should still
-                // open so the user can see a meaningful error toast.
+                // Still show the window so the user sees an error toast
+                if let Some(win) = app_clone.get_webview_window("main") {
+                    let _ = win.show();
+                }
             }
         })?;
 

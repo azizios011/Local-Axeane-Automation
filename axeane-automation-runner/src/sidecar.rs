@@ -87,15 +87,15 @@ pub fn spawn_and_wait(app: &AppHandle, config: &AppConfig) -> Result<()> {
     // Kill any previous instance whose PID file we still have on disk.
     cleanup_stale_pid(&config.backend_pid_path);
 
-    // -------- Check if the backend is already running (service mode) --------
+    // Kill any orphan holding the port even without a PID file.
     if port_is_open(config.backend_port) {
-        info!(
-            "Backend already listening on port {} — assuming Windows Service mode, skipping spawn",
+        warn!(
+            "Port {} already open — killing any orphan python-backend process before spawn",
             config.backend_port
         );
-        wait_for_health(&config.health_url(), config.health_timeout_secs)?;
-        info!("Python sidecar (service) is healthy on {}", config.backend_url());
-        return Ok(());
+        kill_port_holder(config.backend_port);
+        // Give the OS a moment to release the port binding.
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
     info!(
@@ -437,6 +437,33 @@ fn kill_pid(pid: u32) {
 fn kill_pid(pid: u32) {
     let _ = std::process::Command::new("kill")
         .args(["-9", &pid.to_string()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+/// Best-effort: kill whatever process is holding `port` on Windows.
+#[cfg(windows)]
+fn kill_port_holder(port: u16) {
+    // netstat output: "  TCP  127.0.0.1:8080  ...  <pid>"
+    // We parse the last token of each matching line.
+    let out = std::process::Command::new("cmd")
+        .args([
+            "/C",
+            &format!("for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :{port}') do taskkill /F /PID %a"),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output();
+    if let Err(e) = out {
+        warn!("kill_port_holder: {e}");
+    }
+}
+
+#[cfg(not(windows))]
+fn kill_port_holder(port: u16) {
+    let _ = std::process::Command::new("sh")
+        .args(["-c", &format!("fuser -k {port}/tcp 2>/dev/null")])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();

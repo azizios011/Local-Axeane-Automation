@@ -59,6 +59,7 @@ fn run_inner() -> Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(setup_state)
+        .invoke_handler(tauri::generate_handler![is_ready_cmd])
         .setup(|app| {
             // The setup hook is the only place we can reliably talk to
             // the AppHandle before the first window is shown. We block
@@ -94,6 +95,11 @@ fn run_inner() -> Result<()> {
         });
 
     Ok(())
+}
+
+#[tauri::command]
+fn is_ready_cmd(state: tauri::State<'_, setup::SetupState>) -> bool {
+    setup::is_ready(&state)
 }
 
 /// Initialise tracing to write to a log file under `%APPDATA%`.

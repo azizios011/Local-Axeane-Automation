@@ -50,8 +50,14 @@ impl AppConfig {
 
         Ok(Self {
             install_dir,
-            backend_port: 8080,
-            health_timeout_secs: 5,
+            backend_port: std::env::var("AXEANE_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(8080),
+            health_timeout_secs: std::env::var("AXEANE_HEALTH_TIMEOUT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(60), // was 5 — PyInstaller cold-start needs ~10-20s
             backend_pid_path,
             frontend_port: 3000,
         })
