@@ -16,19 +16,18 @@ frontend/node_modules/
 frontend/.next/
 frontend/out/
 
+# Python
+axeane-filler/build/
+axeane-filler/data/
+
+# Compiled binaries
+axeane-automation-runner/binaries/*.exe
+
 # OS
 .DS_Store
 Thumbs.db
 
-# Rust build artifacts 
-axeane-automation-runner/target/ 
-axeane-automation-runner/build/ 
+# Python embeddable cache
+*.zip
 
-# MSI output 
-dist/ 
-
-# Next.js static export 
-frontend/out/ 
-
-# Python embeddable cache 
-*.zip 
+axeane-automation-runner/binaries/python-backend-x86_64-pc-windows-msvc.exe

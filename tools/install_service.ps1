@@ -73,12 +73,15 @@ $ErrorActionPreference = 'Stop'
 # 0. Resolve paths
 # ----------------------------------------------------------------------
 $RepoRoot      = Resolve-Path (Join-Path $PSScriptRoot '..')
-$BinariesSrc   = Join-Path $RepoRoot 'axeane-automation-runner' 'binaries'
-$ServiceExe    = Join-Path $InstallDir 'binaries' 'python-backend.exe'
-$NssmExe       = (Get-Command 'nssm' -ErrorAction SilentlyContinue)?.Source
-
-if (-not $NssmExe) {
-    throw "NSSM is not on PATH. Download it from https://nssm.cc/ and put nssm.exe in C:\Windows\System32\."
+$BinariesSrc   = Join-Path (Join-Path $RepoRoot 'axeane-automation-runner') 'binaries'
+$ServiceExe    = Join-Path (Join-Path $InstallDir 'binaries') 'python-backend.exe'
+$NssmExe       = Join-Path $PSScriptRoot 'nssm.exe'
+if (-not (Test-Path $NssmExe)) {
+    $cmd = Get-Command 'nssm' -ErrorAction SilentlyContinue
+    if ($cmd) { $NssmExe = $cmd.Source }
+}
+if (-not $NssmExe -or -not (Test-Path $NssmExe)) {
+    throw "NSSM not found. Download from https://nssm.cc/ and place nssm.exe in the tools\ folder."
 }
 
 # ----------------------------------------------------------------------
@@ -86,8 +89,8 @@ if (-not $NssmExe) {
 # ----------------------------------------------------------------------
 if ($Uninstall) {
     Write-Host "[service] Removing service '$ServiceName' ..." -ForegroundColor Cyan
-    & nssm stop   $ServiceName 2>&1 | Out-Null
-    & nssm remove $ServiceName confirm 2>&1 | Out-Null
+    & $NssmExe stop   $ServiceName 2>&1 | Out-Null
+    & $NssmExe remove $ServiceName confirm 2>&1 | Out-Null
     Write-Host "[service] Removed." -ForegroundColor Green
     return
 }
@@ -115,24 +118,24 @@ Write-Host "[service] Copying $($SidecarSrc.Name) -> $ServiceExe" -ForegroundCol
 Copy-Item -Path $SidecarSrc.FullName -Destination $ServiceExe -Force
 
 # Stop any existing instance of the service.
-& nssm stop $ServiceName 2>&1 | Out-Null
+& $NssmExe stop $ServiceName 2>&1 | Out-Null
 
 # Install the service.
 Write-Host "[service] Installing '$ServiceName' as a Windows service ..." -ForegroundColor Cyan
-& nssm install $ServiceName $ServiceExe | Out-Null
-& nssm set   $ServiceName AppParameters "--host 127.0.0.1 --port $Port" | Out-Null
-& nssm set   $ServiceName DisplayName "Axeane Kompta Automation Backend" | Out-Null
-& nssm set   $ServiceName Description "FastAPI backend for the Axeane Kompta Automation desktop app. Listens on 127.0.0.1:$Port." | Out-Null
-& nssm set   $ServiceName Start SERVICE_AUTO_START | Out-Null
-& nssm set   $ServiceName Type SERVICE_WIN32_OWN_PROCESS | Out-Null
-& nssm set   $ServiceName AppStdout (Join-Path $InstallDir 'backend.log') | Out-Null
-& nssm set   $ServiceName AppStderr (Join-Path $InstallDir 'backend.err.log') | Out-Null
-& nssm set   $ServiceName AppRotateFiles 1 | Out-Null
-& nssm set   $ServiceName AppRotateBytes 10485760 | Out-Null  # 10 MB
-& nssm set   $ServiceName AppRestartDelay 5000 | Out-Null
+& $NssmExe install $ServiceName $ServiceExe | Out-Null
+& $NssmExe set   $ServiceName AppParameters "--host 127.0.0.1 --port $Port" | Out-Null
+& $NssmExe set   $ServiceName DisplayName "Axeane Kompta Automation Backend" | Out-Null
+& $NssmExe set   $ServiceName Description "FastAPI backend for the Axeane Kompta Automation desktop app. Listens on 127.0.0.1:$Port." | Out-Null
+& $NssmExe set   $ServiceName Start SERVICE_AUTO_START | Out-Null
+& $NssmExe set   $ServiceName Type SERVICE_WIN32_OWN_PROCESS | Out-Null
+& $NssmExe set   $ServiceName AppStdout (Join-Path $InstallDir 'backend.log') | Out-Null
+& $NssmExe set   $ServiceName AppStderr (Join-Path $InstallDir 'backend.err.log') | Out-Null
+& $NssmExe set   $ServiceName AppRotateFiles 1 | Out-Null
+& $NssmExe set   $ServiceName AppRotateBytes 10485760 | Out-Null  # 10 MB
+& $NssmExe set   $ServiceName AppRestartDelay 5000 | Out-Null
 
 # Start the service.
-& nssm start $ServiceName | Out-Null
+& $NssmExe start $ServiceName | Out-Null
 
 Start-Sleep -Seconds 2
 
